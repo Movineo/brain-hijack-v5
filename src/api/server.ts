@@ -6,6 +6,11 @@ import dotenv from 'dotenv';
 import { IngestorService } from '../modules/ingestor/ingestor.service';
 import { TelegramService } from '../modules/notifications/telegram.service';
 import { NewsService } from '../modules/news/news.service';
+import { WebSocketService } from '../modules/websocket/websocket.service';
+import { WhaleService } from '../modules/whale/whale.service';
+import { TwitterService } from '../modules/sentiment/twitter.service';
+import { OnChainService } from '../modules/analytics/onchain.service';
+import { OptionsFlowService } from '../modules/analytics/options-flow.service';
 
 dotenv.config();
 
@@ -30,7 +35,8 @@ fastify.get('/health', async (req, reply) => {
     return reply.send({ 
         status: 'alive', 
         timestamp: new Date().toISOString(),
-        telegram: TelegramService.isConfigured() ? 'configured' : 'not configured'
+        telegram: TelegramService.isConfigured() ? 'configured' : 'not configured',
+        websocket_clients: WebSocketService.getClientCount()
     });
 });
 
@@ -49,14 +55,25 @@ fastify.setErrorHandler((error, request, reply) => {
 const start = async () => {
     try {
         const port = Number(process.env.PORT) || 3000;
+        
+        // Listen and get the HTTP server
         await fastify.listen({ port, host: '0.0.0.0' });
+        
+        // Initialize WebSocket on the HTTP server
+        const httpServer = fastify.server;
+        WebSocketService.initialize(httpServer);
         
         console.log(`Brain Hijack v5 running at http://localhost:${port}`);
         console.log(`[Telegram] Status: ${TelegramService.isConfigured() ? '✅ Ready' : '⚠️ Not configured'}`);
+        console.log(`[WebSocket] Ready at ws://localhost:${port}/ws`);
 
         // Start Data Streams
         IngestorService.startIngestion();
         NewsService.startScanning(); // Phase 6: Narrative Velocity
+        WhaleService.startMonitoring(); // Whale alerts
+        TwitterService.startScanning(); // Twitter sentiment
+        OnChainService.startMonitoring(); // On-chain analytics
+        OptionsFlowService.startMonitoring(); // Options flow
 
     } catch (err) {
         fastify.log.error(err);

@@ -68,6 +68,18 @@ export const TelegramService = {
             console.error('[Telegram] ❌ Failed to send:', error?.message || error);
         }
     },
+
+    // Generic message sender
+    sendMessage: async (message: string) => {
+        if (!bot || !chatId) return;
+
+        try {
+            await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+            console.log('[Telegram] ✅ Message sent');
+        } catch (error: any) {
+            console.error('[Telegram] ❌ Failed to send message:', error?.message || error);
+        }
+    },
     
     // Health check method
     isConfigured: () => {

@@ -1,6 +1,7 @@
 import { SentimentModel } from './sentiment.model';
 import { TelegramService } from '../notifications/telegram.service';
 import { PaperService } from '../execution/paper.service';
+import { WebSocketService } from '../websocket/websocket.service';
 
 // Standard Finite Difference for Acceleration (S''(t))
 function calculateAcceleration(data: number[], h: number = 1): number[] {
@@ -88,7 +89,21 @@ export const SentimentService = {
             // 3. RANKING
             leaderboard.sort((a, b) => b.hijackForce - a.hijackForce);
 
-            // 4. SNIPER: Evaluate for paper trades (Fire & Forget)
+            // 4. BROADCAST via WebSocket (real-time updates!)
+            if (WebSocketService.isReady()) {
+                WebSocketService.broadcastLeaderboard(leaderboard);
+                
+                // Broadcast hijack alerts for high-force assets
+                leaderboard.filter(a => a.isHijacking).forEach(alert => {
+                    WebSocketService.broadcastHijackAlert({
+                        ticker: alert.ticker,
+                        force: alert.hijackForce,
+                        price: alert.latestPrice
+                    });
+                });
+            }
+
+            // 5. SNIPER: Evaluate for paper trades (Fire & Forget)
             PaperService.evaluateMarketState(leaderboard).catch(err => 
                 console.error('[SNIPER] Evaluation error:', err)
             );

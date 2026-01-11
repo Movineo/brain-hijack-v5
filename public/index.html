@@ -203,9 +203,147 @@
     let modalChart = null;
     let heatmapChart = null;
     let pnlChart = null;
+    
+    // WebSocket for real-time updates
+    let ws = null;
+    let wsConnected = false;
+    let wsReconnectAttempts = 0;
+
+    function connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws`;
+        
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+            console.log('[WS] Connected');
+            wsConnected = true;
+            wsReconnectAttempts = 0;
+            updateConnectionStatus(true);
+        };
+        
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                handleWebSocketMessage(msg);
+            } catch (e) {
+                console.error('[WS] Parse error:', e);
+            }
+        };
+        
+        ws.onclose = () => {
+            console.log('[WS] Disconnected');
+            wsConnected = false;
+            updateConnectionStatus(false);
+            
+            // Reconnect with exponential backoff
+            const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000);
+            wsReconnectAttempts++;
+            setTimeout(connectWebSocket, delay);
+        };
+        
+        ws.onerror = (err) => {
+            console.error('[WS] Error:', err);
+        };
+    }
+
+    function handleWebSocketMessage(msg) {
+        switch (msg.type) {
+            case 'leaderboard':
+                updateLeaderboardFromWS(msg.data);
+                break;
+            case 'trade':
+                showTradeNotification(msg.data);
+                break;
+            case 'hijack_alert':
+                showHijackNotification(msg.data);
+                break;
+            case 'stats':
+                updateStatsFromWS(msg.data);
+                break;
+        }
+    }
+
+    function updateLeaderboardFromWS(assets) {
+        const tbody = document.getElementById("gridBody");
+        tbody.innerHTML = "";
+        let globalPanic = false;
+
+        assets.forEach((asset, index) => {
+            const row = document.createElement("tr");
+            row.className = "asset-row";
+            row.onclick = () => openModal(asset.ticker);
+            
+            if (asset.isHijacking) globalPanic = true;
+            
+            const forceClass = asset.isHijacking ? "force-high" : "force-low";
+            const statusText = asset.isHijacking ? "⚠️ HIJACK" : "STABLE";
+            const statusColor = asset.isHijacking ? "#da3633" : "#238636";
+
+            const narrativeScore = asset.narrativeScore || 0;
+            let narrativeColor = "#8b949e";
+            if (narrativeScore > 0) narrativeColor = "#238636";
+            if (narrativeScore < 0) narrativeColor = "#da3633";
+            const narrativeDisplay = narrativeScore > 0 ? `+${narrativeScore}` : narrativeScore.toString();
+            const headline = asset.latestHeadline || '--';
+
+            row.innerHTML = `
+                <td style="color: #8b949e;">#${index + 1}</td>
+                <td class="ticker">${asset.ticker}</td>
+                <td>${Number(asset.latestPrice).toFixed(4)}</td>
+                <td class="${forceClass}">${asset.hijackForce.toFixed(5)}</td>
+                <td style="color:${narrativeColor}; cursor:help;" title="${headline}">${narrativeDisplay}</td>
+                <td style="color:${statusColor}">${statusText}</td>
+            `;
+            tbody.appendChild(row);
+        });
+
+        const statusBox = document.getElementById("globalStatus");
+        if (globalPanic) {
+            statusBox.innerText = "HIJACK DETECTED"; statusBox.className = "status-box critical";
+            if (audioEnabled && !isAlarmActive) { audio.play().catch(e => {}); isAlarmActive = true; }
+        } else {
+            statusBox.innerText = "SECURE"; statusBox.className = "status-box normal"; isAlarmActive = false;
+        }
+    }
+
+    function showTradeNotification(trade) {
+        // Show toast notification for trades
+        const emoji = trade.action === 'BUY' ? '🔫' : (trade.pnl >= 0 ? '💰' : '💸');
+        console.log(`[TRADE] ${emoji} ${trade.action} ${trade.ticker} @ $${trade.price.toFixed(4)}`);
+    }
+
+    function showHijackNotification(alert) {
+        console.log(`[ALERT] ⚠️ Hijack on ${alert.ticker} - Force: ${alert.force.toFixed(4)}`);
+    }
+
+    function updateStatsFromWS(stats) {
+        const pnlValue = parseFloat(stats.totalPnL);
+        document.getElementById("statPnL").innerText = `$${stats.totalPnL}`;
+        document.getElementById("statPnL").className = pnlValue >= 0 ? 'profit' : 'loss';
+        document.getElementById("statWinRate").innerText = stats.winRate;
+        document.getElementById("statTrades").innerText = stats.totalTrades;
+        document.getElementById("statOpen").innerText = stats.openPositions;
+    }
+
+    function updateConnectionStatus(connected) {
+        // Add visual indicator for WS connection
+        const header = document.querySelector('.header');
+        let indicator = document.getElementById('wsIndicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'wsIndicator';
+            indicator.style.cssText = 'font-size:0.7em; padding:3px 8px; border-radius:3px;';
+            header.appendChild(indicator);
+        }
+        indicator.innerText = connected ? '🟢 LIVE' : '🔴 RECONNECTING';
+        indicator.style.background = connected ? '#238636' : '#da3633';
+    }
 
     function enableAudio() {
         audio.play().then(() => { audio.pause(); audio.currentTime = 0; audioEnabled = true; document.getElementById('startOverlay').style.display = 'none'; });
+        // Connect WebSocket after user interaction
+        connectWebSocket();
     }
 
     // --- MODAL LOGIC (The Microscope) ---
@@ -438,8 +576,24 @@
         }
     }
 
-    // Refresh every 1.5 seconds
-    setInterval(updateDashboard, 1500);
+    // Refresh every 3 seconds (fallback for non-WS data like heatmap, trades, pnl history)
+    // WebSocket handles leaderboard in real-time
+    setInterval(async () => {
+        try {
+            // Heatmap
+            const heatRes = await fetch("/api/v1/sentiment/heatmap");
+            const heatJson = await heatRes.json();
+            if (heatJson.success && heatJson.data.length > 0) {
+                updateHeatmap(heatJson.data);
+            }
+
+            // Sniper panel (trades, stats, pnl)
+            await updateSniperPanel();
+        } catch (err) { console.error("Sync lost", err); }
+    }, 3000);
+    
+    // Initial load via HTTP (before WS connects)
+    updateDashboard();
 </script>
 </body>
 </html>

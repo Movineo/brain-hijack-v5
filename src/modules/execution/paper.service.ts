@@ -1,23 +1,28 @@
 import { query } from '../../shared/db';
 import { TelegramService } from '../notifications/telegram.service';
 import { NewsService } from '../news/news.service';
+import { ConfigService } from '../../shared/config.service';
 
-// CONFIG: Sniper Parameters
-const TRADE_SIZE_USD = 1000;        // Simulated USD per trade
-const ENTRY_THRESHOLD = 0.08;       // Hijack Force must be > this to BUY
-const EXIT_THRESHOLD = 0.01;        // Force drops below this = TAKE PROFIT
-const STOP_LOSS_PERCENT = -2.0;     // Max loss before we bail
-const TAKE_PROFIT_PERCENT = 3.0;    // Take profit at 3% gain
-const REQUIRE_NARRATIVE = true;     // Only trade if narrative confirms (true = safer)
+// In-memory high water marks for trailing stops
+const highWaterMarks: Map<string, number> = new Map();
 
 export const PaperService = {
     // 1. MAIN LOOP: Evaluate entire market state (now with narrative fusion)
     evaluateMarketState: async (leaderboard: any[]) => {
+        // CHECK KILL SWITCH
+        if (!ConfigService.isPaperTradingAllowed()) {
+            return; // Trading disabled
+        }
+
         for (const asset of leaderboard) {
             try {
                 // Get narrative score for this asset
                 const narrative = NewsService.getNarrative(asset.ticker);
                 const narrativeScore = narrative.score;
+                
+                // Get thresholds from config
+                const ENTRY_THRESHOLD = ConfigService.getEntryThreshold();
+                const REQUIRE_NARRATIVE = ConfigService.getRequireNarrative();
                 
                 // SMART ENTRY: Force HIGH + Narrative confirms direction
                 const forceHigh = asset.hijackForce > ENTRY_THRESHOLD;
@@ -42,6 +47,9 @@ export const PaperService = {
 
     // 2. ENTRY: Open a new position (now logs narrative)
     openPosition: async (ticker: string, price: number, force: number, narrativeScore: number = 0) => {
+        // Check kill switch
+        if (!ConfigService.isPaperTradingAllowed()) return;
+
         // Check if we already have an OPEN trade for this ticker
         const existing = await query(
             `SELECT id FROM paper_trades WHERE ticker = $1 AND status = 'OPEN'`, 
@@ -50,6 +58,11 @@ export const PaperService = {
         
         if (existing.rows.length > 0) return; // Don't double buy
 
+        // Check max open positions
+        const openCount = await query(`SELECT COUNT(*) as cnt FROM paper_trades WHERE status = 'OPEN'`);
+        if (parseInt(openCount.rows[0].cnt) >= ConfigService.getMaxOpenPositions()) return;
+
+        const TRADE_SIZE_USD = ConfigService.getTradeSizeUsd();
         const quantity = TRADE_SIZE_USD / price;
 
         await query(
@@ -67,7 +80,7 @@ export const PaperService = {
         await TelegramService.sendHijackAlert(ticker, price, force);
     },
 
-    // 3. EXIT MANAGEMENT: Now with take-profit
+    // 3. EXIT MANAGEMENT: Now with trailing stop
     managePositions: async (ticker: string, currentPrice: number, currentForce: number) => {
         const res = await query(
             `SELECT * FROM paper_trades WHERE ticker = $1 AND status = 'OPEN'`, 
@@ -81,6 +94,22 @@ export const PaperService = {
         const quantity = parseFloat(trade.quantity);
         const pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
 
+        // Get config values
+        const TAKE_PROFIT_PERCENT = ConfigService.getTakeProfitPercent();
+        const STOP_LOSS_PERCENT = ConfigService.getStopLossPercent();
+        const EXIT_THRESHOLD = ConfigService.getExitThreshold();
+        const TRAILING_STOP_ENABLED = ConfigService.getTrailingStopEnabled();
+        const TRAILING_STOP_PERCENT = ConfigService.getTrailingStopPercent();
+        const TRAILING_ACTIVATION = ConfigService.getTrailingActivation();
+
+        // Update high water mark for trailing stop
+        const currentHigh = highWaterMarks.get(ticker) || entryPrice;
+        if (currentPrice > currentHigh) {
+            highWaterMarks.set(ticker, currentPrice);
+        }
+        const highWaterMark = highWaterMarks.get(ticker) || entryPrice;
+        const dropFromHigh = ((highWaterMark - currentPrice) / highWaterMark) * 100;
+
         let shouldClose = false;
         let reason = "";
 
@@ -90,12 +119,17 @@ export const PaperService = {
             shouldClose = true;
             reason = "TAKE_PROFIT";
         }
-        // 2. Stop Loss - Cut losses
+        // 2. Trailing Stop - Only if in profit and enabled
+        else if (TRAILING_STOP_ENABLED && pnlPercent >= TRAILING_ACTIVATION && dropFromHigh >= TRAILING_STOP_PERCENT) {
+            shouldClose = true;
+            reason = `TRAILING_STOP (High: $${highWaterMark.toFixed(2)})`;
+        }
+        // 3. Stop Loss - Cut losses
         else if (pnlPercent <= STOP_LOSS_PERCENT) {
             shouldClose = true;
             reason = "STOP_LOSS";
         }
-        // 3. Momentum died - Exit regardless of P&L
+        // 4. Momentum died - Exit regardless of P&L
         else if (currentForce < EXIT_THRESHOLD) {
             shouldClose = true;
             reason = "MOMENTUM_DIED";
@@ -110,6 +144,9 @@ export const PaperService = {
                  WHERE id = $3`,
                 [currentPrice, profitUsd, trade.id]
             );
+
+            // Clear high water mark
+            highWaterMarks.delete(ticker);
 
             const emoji = profitUsd >= 0 ? '💰' : '💸';
             console.log(`[SNIPER] ${emoji} CLOSED ${ticker}. P&L: $${profitUsd.toFixed(2)} (${reason})`);
