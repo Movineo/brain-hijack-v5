@@ -1,59 +1,96 @@
-import { Worker } from 'worker_threads';
-import path from 'path';
 import { SentimentModel } from './sentiment.model';
+import { TelegramService } from '../notifications/telegram.service';
+
+// Standard Finite Difference for Acceleration (S''(t))
+function calculateAcceleration(data: number[], h: number = 1): number[] {
+    const acceleration: number[] = [];
+    if (data.length < 3) return [];
+    
+    for (let i = 1; i < data.length - 1; i++) {
+        const s_prev = data[i - 1];
+        const s_curr = data[i];
+        const s_next = data[i + 1];
+        
+        // Central Difference Formula
+        const secondDerivative = (s_next - (2 * s_curr) + s_prev) / (h ** 2);
+        acceleration.push(secondDerivative);
+    }
+    return acceleration;
+}
 
 export const SentimentService = {
     // 1. SINGLE ASSET ANALYSIS (For the Modal Chart)
     analyzeMarketBrain: async (ticker: string) => {
-        // Fetch last 50 data points for this specific ticker
-        const scores = await SentimentModel.getRecentSignals(ticker, 50);
-        
-        // Return the raw history so the frontend can plot the line chart
-        return { 
-            ticker, 
-            history: scores 
-        }; 
+        try {
+            const scores = await SentimentModel.getRecentSignals(ticker, 50);
+            return { ticker, history: scores }; 
+        } catch (error) {
+            console.error(`[SentimentService] Error analyzing ${ticker}:`, error);
+            return { ticker, history: [] };
+        }
     },
 
-    // 2. THE PANOPTICON (Multi-Asset Leaderboard)
+    // 2. THE PANOPTICON (Multi-Asset Leaderboard) - WORKER-FREE VERSION
     getMarketLeaderboard: async () => {
-        // Get raw mixed data from DB (Last 3 minutes of ALL coins)
-        const rawData = await SentimentModel.getMarketWindow();
+        try {
+            const rawData = await SentimentModel.getMarketWindow();
 
-        if (rawData.length === 0) return [];
+            if (rawData.length === 0) return [];
 
-        // Offload Grouping & Math to Worker
-        return new Promise((resolve, reject) => {
-            
-            // --- FIX: SMART WORKER PATHING ---
-            // 1. Check if we are running as a .ts file (Dev) or .js file (Prod)
-            const isTs = __filename.endsWith('.ts');
-            
-            // 2. Select the correct worker file extension
-            const workerFileName = isTs ? './sentiment.worker.ts' : './sentiment.worker.js';
-            const workerPath = path.resolve(__dirname, workerFileName);
-            
-            // 3. Only use 'ts-node' logic if we are in Development
-            const workerOptions = isTs ? { execArgv: ['-r', 'ts-node/register'] } : {};
+            const leaderboard: any[] = [];
 
-            // Initialize Worker with dynamic path and options
-            const worker = new Worker(workerPath, workerOptions);
+            // 1. GROUPING LOGIC (moved from worker)
+            const groups: Record<string, { score: number, volume: number }[]> = {};
 
-            worker.postMessage({ type: 'MULTI_ASSET', rawData });
+            rawData.forEach((row: any) => {
+                const t = row.ticker;
+                if (!groups[t]) groups[t] = [];
+                groups[t].push({
+                    score: Number(row.sentiment_score),
+                    volume: Number(row.volume)
+                });
+            });
 
-            worker.on('message', (result) => {
-                if (result.status === 'success') {
-                    resolve(result.data); // Returns the sorted Leaderboard
-                } else {
-                    reject(result.error);
+            // 2. MATH LOGIC (moved from worker)
+            for (const ticker in groups) {
+                const history = groups[ticker];
+
+                if (history.length < 3) continue;
+
+                const priceData = history.map(h => h.score);
+                const accelerations = calculateAcceleration(priceData);
+
+                const currentAccel = accelerations[accelerations.length - 1] || 0;
+                const latestVolume = history[history.length - 1].volume;
+                const latestPrice = history[history.length - 1].score;
+
+                // FORCE FORMULA: |Accel| * Log10(Volume)
+                const safeVolume = latestVolume > 1 ? Math.log10(latestVolume) : 0;
+                const hijackForce = Math.abs(currentAccel) * safeVolume;
+
+                // THRESHOLD: > 0.05 is a significant move
+                const isHijacking = hijackForce > 0.05; 
+
+                // 3. TRIGGER TELEGRAM (now in main thread - reliable!)
+                if (isHijacking) {
+                    TelegramService.sendHijackAlert(ticker, latestPrice, hijackForce);
                 }
-                worker.terminate();
-            });
 
-            worker.on('error', reject);
-            worker.on('exit', (code) => {
-                if (code !== 0) reject(new Error(`Worker stopped with exit code ${code}`));
-            });
-        });
+                leaderboard.push({
+                    ticker,
+                    hijackForce,
+                    latestPrice,
+                    isHijacking
+                });
+            }
+
+            // 3. RANKING
+            leaderboard.sort((a, b) => b.hijackForce - a.hijackForce);
+
+            return leaderboard;
+        } catch (error) {
+            console.error('[SentimentService] Leaderboard error:', error);
+            return []; // Return empty array instead of crashing
+        }
     }
 };
