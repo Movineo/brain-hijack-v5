@@ -32,8 +32,9 @@ const start = async () => {
         
         console.log(`Brain Hijack v5 running at http://localhost:${port}`);
 
-        // UPDATED: Pass an array of assets you want to hijack
-        IngestorService.startIngestion(['btcusdt', 'ethusdt', 'solusdt', 'dogeusdt', 'pepeusdt']); 
+        // UPDATED: No arguments needed. 
+        // The Ingestor now automatically filters the CoinCap firehose for BTC, ETH, SOL, DOGE, PEPE.
+        IngestorService.startIngestion(); 
 
     } catch (err) {
         fastify.log.error(err);

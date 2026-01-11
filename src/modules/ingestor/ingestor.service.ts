@@ -2,69 +2,71 @@ import WebSocket from 'ws';
 import { query } from '../../shared/db';
 
 export const IngestorService = {
-    // UPDATED: Removed 'pepeusdt' & 'xrpusdt' as they may not be on Binance.US
-    // Kept the majors: BTC, ETH, SOL, DOGE, BNB
-    startIngestion: (tickers: string[] = ['btcusdt', 'ethusdt', 'solusdt', 'bnbusdt', 'dogeusdt']) => {
+    startIngestion: () => {
         
-        // Format for Binance Stream
-        const streams = tickers.map(t => `${t.toLowerCase()}@aggTrade`).join('/');
-        
-        // CRITICAL FIX: Changed domain to 'stream.binance.us' to bypass US Geo-Block (Error 451)
-        const wsUrl = `wss://stream.binance.us:9443/stream?streams=${streams}`;
+        // WEAPON UPDATE: Switching to CoinCap (Global Aggregator)
+        // This bypasses Binance Geo-Blocks and 451 Errors.
+        const wsUrl = 'wss://ws.coincap.io/trades/binance';
 
-        console.log(`[Ingestor] 🟢 Attempting connection to US Stream: ${wsUrl}`);
+        console.log(`[Ingestor] 🟢 Connecting to Universal Stream: ${wsUrl}`);
 
         const ws = new WebSocket(wsUrl);
 
         ws.on('open', () => {
-            console.log('[Ingestor] ✅ CONNECTION SUCCESSFUL! Listening to US market...');
+            console.log('[Ingestor] ✅ CONNECTION ESTABLISHED! Siphoning global market data...');
         });
 
-        // DEBUG: Counter to log pulse check every 10 trades
         let tradeCount = 0;
 
         ws.on('message', async (data: string) => {
             try {
-                const message = JSON.parse(data);
+                const trade = JSON.parse(data);
                 
-                // Validate data shape
-                if (!message.data) return;
+                // CoinCap sends EVERYTHING. We need to filter for our targets.
+                // Format: { base: 'bitcoin', quote: 'tether', price: 90000, volume: 0.1 ... }
+                
+                // 1. Only look for USDT pairs (tether)
+                if (trade.quote !== 'tether') return;
 
-                const trade = message.data;
-                const ticker = trade.s; // e.g., 'BTCUSDT'
-                const price = parseFloat(trade.p);
-                const volume = parseFloat(trade.q);
-                
-                // DEBUG LOG: Print every 10th trade to console to confirm life
+                // 2. Map names to Tickers
+                let ticker = '';
+                if (trade.base === 'bitcoin') ticker = 'BTCUSDT';
+                else if (trade.base === 'ethereum') ticker = 'ETHUSDT';
+                else if (trade.base === 'solana') ticker = 'SOLUSDT';
+                else if (trade.base === 'dogecoin') ticker = 'DOGEUSDT';
+                else if (trade.base === 'pepe') ticker = 'PEPEUSDT';
+
+                // If it's not on our list, ignore it
+                if (!ticker) return;
+
+                const price = parseFloat(trade.price);
+                const volume = parseFloat(trade.volume);
+
+                // DEBUG: Prove it works
                 tradeCount++;
                 if (tradeCount % 10 === 0) {
-                    console.log(`[Ingestor] 💓 Pulse Check: Received ${ticker} at $${price}`);
+                    console.log(`[Ingestor] 💓 Pulse: ${ticker} @ $${price}`);
                 }
 
-                try {
-                    const sql = `
-                        INSERT INTO sentiment_metrics (ticker, sentiment_score, volume, time) 
-                        VALUES ($1, $2, $3, NOW())
-                    `;
-                    
-                    await query(sql, [ticker, price, volume]);
-                    
-                } catch (dbErr) {
-                    console.error("[Ingestor] 🔴 DB SAVE ERROR:", dbErr);
-                }
-            } catch (parseErr) {
-                console.error("[Ingestor] ⚠️ Data Parse Error:", parseErr);
+                const sql = `
+                    INSERT INTO sentiment_metrics (ticker, sentiment_score, volume, time) 
+                    VALUES ($1, $2, $3, NOW())
+                `;
+                
+                await query(sql, [ticker, price, volume]);
+
+            } catch (err) {
+                // Ignore parse errors from "ping" messages
             }
         });
 
         ws.on('error', (err) => {
-            // Log the error message clearly
             console.error('[Ingestor] 💀 CONNECTION ERROR:', err.message);
         });
 
         ws.on('close', () => {
-            console.log('[Ingestor] ⚠️ Connection Closed. Reconnecting in 5s...');
-            setTimeout(() => IngestorService.startIngestion(tickers), 5000);
+            console.log('[Ingestor] ⚠️ Disconnected. Restarting in 5s...');
+            setTimeout(() => IngestorService.startIngestion(), 5000);
         });
     }
 };
