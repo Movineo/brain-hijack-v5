@@ -11,7 +11,7 @@ export const SentimentService = {
         // Return the raw history so the frontend can plot the line chart
         return { 
             ticker, 
-            history: scores // <--- FIXED: Now sending real data
+            history: scores 
         }; 
     },
 
@@ -24,11 +24,20 @@ export const SentimentService = {
 
         // Offload Grouping & Math to Worker
         return new Promise((resolve, reject) => {
-            const workerPath = path.resolve(__dirname, './sentiment.worker.ts');
             
-            const worker = new Worker(workerPath, {
-                execArgv: ['-r', 'ts-node/register'] 
-            });
+            // --- FIX: SMART WORKER PATHING ---
+            // 1. Check if we are running as a .ts file (Dev) or .js file (Prod)
+            const isTs = __filename.endsWith('.ts');
+            
+            // 2. Select the correct worker file extension
+            const workerFileName = isTs ? './sentiment.worker.ts' : './sentiment.worker.js';
+            const workerPath = path.resolve(__dirname, workerFileName);
+            
+            // 3. Only use 'ts-node' logic if we are in Development
+            const workerOptions = isTs ? { execArgv: ['-r', 'ts-node/register'] } : {};
+
+            // Initialize Worker with dynamic path and options
+            const worker = new Worker(workerPath, workerOptions);
 
             worker.postMessage({ type: 'MULTI_ASSET', rawData });
 
