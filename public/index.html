@@ -682,7 +682,7 @@
                 const comps = document.getElementById("fearGreedComponents");
                 
                 gauge.innerText = data.value;
-                label.innerText = data.classification;
+                label.innerText = data.label || 'Neutral';
                 
                 // Color based on value
                 if (data.value <= 25) { gauge.style.color = "#da3633"; label.style.color = "#da3633"; }
@@ -730,9 +730,10 @@
                 panel.innerHTML = json.data.slice(0, 4).map(p => {
                     const dir = p.predicted_direction === 'up' ? '↑' : '↓';
                     const color = p.predicted_direction === 'up' ? '#238636' : '#da3633';
+                    const conf = p.confidence > 1 ? p.confidence : (p.confidence * 100); // Handle both 0-1 and 0-100 scales
                     return `<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #21262d;">
                         <span class="ticker">${p.ticker}</span>
-                        <span style="color:${color}">${dir} ${(p.confidence * 100).toFixed(0)}%</span>
+                        <span style="color:${color}">${dir} ${conf.toFixed(0)}%</span>
                     </div>`;
                 }).join('') || '<div style="color:#8b949e;">No high-confidence signals</div>';
             }
