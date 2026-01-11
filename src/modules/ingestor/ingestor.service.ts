@@ -3,51 +3,64 @@ import { query } from '../../shared/db';
 
 export const IngestorService = {
     startIngestion: () => {
+        // COINBASE: The US-Friendly Giant.
+        const wsUrl = 'wss://ws-feed.exchange.coinbase.com';
         
-        // WEAPON UPDATE: Switching to CoinCap (Global Aggregator)
-        // This bypasses Binance Geo-Blocks and 451 Errors.
-        const wsUrl = 'wss://ws.coincap.io/trades/binance';
+        // Coinbase uses hyphens: BTC-USD, not BTCUSDT
+        const assets = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'DOGE-USD'];
 
-        console.log(`[Ingestor] 🟢 Connecting to Universal Stream: ${wsUrl}`);
+        console.log(`[Ingestor] 🟢 Connecting to Coinbase Stream...`);
 
         const ws = new WebSocket(wsUrl);
 
         ws.on('open', () => {
-            console.log('[Ingestor] ✅ CONNECTION ESTABLISHED! Siphoning global market data...');
+            console.log('[Ingestor] ✅ CONNECTED! Sending subscription...');
+            
+            // Coinbase requires a formal subscription packet
+            const msg = {
+                type: "subscribe",
+                product_ids: assets,
+                channels: ["ticker"]
+            };
+            
+            ws.send(JSON.stringify(msg));
         });
 
         let tradeCount = 0;
 
         ws.on('message', async (data: string) => {
             try {
-                const trade = JSON.parse(data);
-                
-                // CoinCap sends EVERYTHING. We need to filter for our targets.
-                // Format: { base: 'bitcoin', quote: 'tether', price: 90000, volume: 0.1 ... }
-                
-                // 1. Only look for USDT pairs (tether)
-                if (trade.quote !== 'tether') return;
+                const message = JSON.parse(data);
 
-                // 2. Map names to Tickers
-                let ticker = '';
-                if (trade.base === 'bitcoin') ticker = 'BTCUSDT';
-                else if (trade.base === 'ethereum') ticker = 'ETHUSDT';
-                else if (trade.base === 'solana') ticker = 'SOLUSDT';
-                else if (trade.base === 'dogecoin') ticker = 'DOGEUSDT';
-                else if (trade.base === 'pepe') ticker = 'PEPEUSDT';
+                // We only care about 'ticker' updates
+                if (message.type !== 'ticker') return;
 
-                // If it's not on our list, ignore it
-                if (!ticker) return;
+                /* Coinbase Data Shape:
+                   {
+                       type: 'ticker',
+                       product_id: 'BTC-USD',
+                       price: '95000.00',
+                       volume_24h: '10000',
+                       ...
+                   }
+                */
 
-                const price = parseFloat(trade.price);
-                const volume = parseFloat(trade.volume);
+                // 1. Normalize Ticker (Remove the hyphen to match our DB: BTC-USD -> BTCUSD)
+                const rawTicker = message.product_id; // e.g. BTC-USD
+                const ticker = rawTicker.replace('-', ''); // BTCUSD
 
-                // DEBUG: Prove it works
+                const price = parseFloat(message.price);
+                // Coinbase sends 24h volume in ticker, or last_size for immediate trade size.
+                // We'll use last_size (immediate volume) if available, else 1.0
+                const volume = parseFloat(message.last_size || '1.0');
+
+                // DEBUG LOG
                 tradeCount++;
                 if (tradeCount % 10 === 0) {
                     console.log(`[Ingestor] 💓 Pulse: ${ticker} @ $${price}`);
                 }
 
+                // 2. Save to DB
                 const sql = `
                     INSERT INTO sentiment_metrics (ticker, sentiment_score, volume, time) 
                     VALUES ($1, $2, $3, NOW())
@@ -56,7 +69,7 @@ export const IngestorService = {
                 await query(sql, [ticker, price, volume]);
 
             } catch (err) {
-                // Ignore parse errors from "ping" messages
+                // Ignore parsing errors
             }
         });
 
