@@ -1,0 +1,26 @@
+{
+  "name": "brain-hijack-v5",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "ts-node src/api/server.ts",
+    "build": "tsc",
+    "start": "node dist/api/server.js"
+  },
+  "dependencies": {
+    "@fastify/static": "^7.0.0",
+    "dotenv": "^16.3.1",
+    "fastify": "^4.24.3",
+    "node-telegram-bot-api": "^0.67.0",
+    "path": "^0.12.7",
+    "pg": "^8.11.3",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.10",
+    "@types/node-telegram-bot-api": "^0.64.13",
+    "@types/pg": "^8.10.7",
+    "@types/ws": "^8.18.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}
