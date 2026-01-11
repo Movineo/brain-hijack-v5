@@ -1,5 +1,6 @@
 import { SentimentModel } from './sentiment.model';
 import { TelegramService } from '../notifications/telegram.service';
+import { PaperService } from '../execution/paper.service';
 
 // Standard Finite Difference for Acceleration (S''(t))
 function calculateAcceleration(data: number[], h: number = 1): number[] {
@@ -86,6 +87,11 @@ export const SentimentService = {
 
             // 3. RANKING
             leaderboard.sort((a, b) => b.hijackForce - a.hijackForce);
+
+            // 4. SNIPER: Evaluate for paper trades (Fire & Forget)
+            PaperService.evaluateMarketState(leaderboard).catch(err => 
+                console.error('[SNIPER] Evaluation error:', err)
+            );
 
             return leaderboard;
         } catch (error) {

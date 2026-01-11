@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { SentimentService } from '../../modules/sentiment/sentiment.service';
+import { PaperService } from '../../modules/execution/paper.service';
 
 // ORIGINAL: Single Coin Analysis (Keep for specific queries)
 export const getSentimentAnalysis = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -41,5 +42,28 @@ export const getMarketHeatmap = async (request: FastifyRequest, reply: FastifyRe
     } catch (error) {
         request.log.error(error);
         return reply.status(500).send({ error: 'Failed to generate heatmap.' });
+    }
+};
+
+// 4. SNIPER: Paper Trade History
+export const getPaperTrades = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const sql = `SELECT * FROM paper_trades ORDER BY opened_at DESC LIMIT 20`;
+        const result = await require('../../shared/db').query(sql);
+        return reply.send({ success: true, data: result.rows });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to fetch trades.' });
+    }
+};
+
+// 5. SNIPER: Trading Stats
+export const getPaperStats = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const stats = await PaperService.getStats();
+        return reply.send({ success: true, data: stats });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to fetch stats.' });
     }
 };
