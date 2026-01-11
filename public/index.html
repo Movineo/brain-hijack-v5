@@ -70,6 +70,15 @@
         .profit { color: #238636; }
         .loss { color: #da3633; }
 
+        /* INTEL PANELS - 3 column grid for small cards */
+        .intel-row { 
+            grid-column: 1 / -1; 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); 
+            gap: 15px; 
+        }
+        .intel-row .panel { min-height: 150px; }
+
         /* MOBILE RESPONSIVE */
         @media (max-width: 900px) { 
             .container { grid-template-columns: 1fr; }
@@ -148,6 +157,72 @@
         <div class="panel-title">1-Hour Volume Pressure</div>
         <div id="heatmapContainer">
             <canvas id="heatmapCanvas"></canvas>
+        </div>
+    </div>
+
+    <!-- MARKET INTELLIGENCE ROW -->
+    <div class="intel-row">
+        <div class="panel">
+            <div class="panel-title">📊 Fear & Greed Index</div>
+            <div id="fearGreedPanel" style="text-align:center; padding: 10px;">
+                <div id="fearGreedGauge" style="font-size: 3em; font-weight: bold; color: #58a6ff;">--</div>
+                <div id="fearGreedLabel" style="font-size: 1.2em; color: #8b949e;">Loading...</div>
+                <div id="fearGreedComponents" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; justify-content: center;"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">🐦 Twitter Sentiment</div>
+            <div id="twitterPanel" style="padding: 10px;">
+                <div id="twitterTrending" style="margin-bottom: 10px;"></div>
+                <div id="twitterMentions" style="font-size: 0.8em; color: #8b949e;"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">🤖 ML Predictions</div>
+            <div id="mlPanel" style="padding: 10px;">
+                <div id="mlHighConfidence" style="font-size: 0.9em;"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">📈 Options Flow</div>
+            <div id="optionsPanel" style="padding: 10px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <div id="optionsSentiment" style="font-size: 1.5em; font-weight: bold;">--</div>
+                    <div id="optionsPCR" style="color: #8b949e;">P/C: --</div>
+                </div>
+                <div id="optionsUnusual" style="font-size: 0.8em;"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">⛓️ On-Chain Health</div>
+            <div id="onchainPanel" style="padding: 10px;">
+                <div id="onchainSummary" style="font-size: 0.9em;"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">🔔 Price Alerts</div>
+            <div id="alertsPanel" style="padding: 10px;">
+                <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                    <select id="alertTicker" style="flex:1; padding:5px; background:#21262d; border:1px solid #30363d; color:#c9d1d9; border-radius:4px;">
+                        <option value="BTC">BTC</option>
+                        <option value="ETH">ETH</option>
+                        <option value="SOL">SOL</option>
+                        <option value="DOGE">DOGE</option>
+                    </select>
+                    <input id="alertPrice" type="number" placeholder="Price" style="flex:1; padding:5px; background:#21262d; border:1px solid #30363d; color:#c9d1d9; border-radius:4px;">
+                    <select id="alertCondition" style="padding:5px; background:#21262d; border:1px solid #30363d; color:#c9d1d9; border-radius:4px;">
+                        <option value="above">≥</option>
+                        <option value="below">≤</option>
+                    </select>
+                    <button onclick="createAlert()" style="padding:5px 10px; background:#238636; border:none; color:#fff; border-radius:4px; cursor:pointer;">+</button>
+                </div>
+                <div id="activeAlerts" style="font-size: 0.8em; max-height: 100px; overflow-y: auto;"></div>
+            </div>
         </div>
     </div>
 
@@ -594,6 +669,230 @@
     
     // Initial load via HTTP (before WS connects)
     updateDashboard();
+
+    // --- NEW INTEL PANELS ---
+    async function updateFearGreed() {
+        try {
+            const res = await fetch("/api/v1/sentiment/fear-greed");
+            const json = await res.json();
+            if (json.success) {
+                const data = json.data;
+                const gauge = document.getElementById("fearGreedGauge");
+                const label = document.getElementById("fearGreedLabel");
+                const comps = document.getElementById("fearGreedComponents");
+                
+                gauge.innerText = data.value;
+                label.innerText = data.classification;
+                
+                // Color based on value
+                if (data.value <= 25) { gauge.style.color = "#da3633"; label.style.color = "#da3633"; }
+                else if (data.value <= 45) { gauge.style.color = "#f85149"; }
+                else if (data.value <= 55) { gauge.style.color = "#8b949e"; }
+                else if (data.value <= 75) { gauge.style.color = "#7ee787"; }
+                else { gauge.style.color = "#238636"; label.style.color = "#238636"; }
+                
+                // Components
+                comps.innerHTML = Object.entries(data.components || {}).map(([k,v]) => 
+                    `<span style="background:#21262d; padding:2px 6px; border-radius:3px; font-size:0.7em;">${k}: ${v}</span>`
+                ).join('');
+            }
+        } catch(e) { console.log('Fear/Greed unavailable'); }
+    }
+
+    async function updateTwitterSentiment() {
+        try {
+            const res = await fetch("/api/v1/sentiment/twitter/trending");
+            const json = await res.json();
+            if (json.success) {
+                const trending = document.getElementById("twitterTrending");
+                const mentions = document.getElementById("twitterMentions");
+                
+                trending.innerHTML = json.data.slice(0, 5).map(t => {
+                    const color = t.sentiment > 0 ? '#238636' : t.sentiment < 0 ? '#da3633' : '#8b949e';
+                    return `<div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid #21262d;">
+                        <span>${t.topic}</span>
+                        <span style="color:${color}">${t.sentiment > 0 ? '+' : ''}${t.sentiment.toFixed(2)}</span>
+                    </div>`;
+                }).join('');
+                
+                const total = json.data.reduce((s, t) => s + t.mentions, 0);
+                mentions.innerText = `${total} mentions in last hour`;
+            }
+        } catch(e) { console.log('Twitter unavailable'); }
+    }
+
+    async function updateMLPredictions() {
+        try {
+            const res = await fetch("/api/v1/sentiment/ml/high-confidence");
+            const json = await res.json();
+            if (json.success) {
+                const panel = document.getElementById("mlHighConfidence");
+                panel.innerHTML = json.data.slice(0, 4).map(p => {
+                    const dir = p.predicted_direction === 'up' ? '↑' : '↓';
+                    const color = p.predicted_direction === 'up' ? '#238636' : '#da3633';
+                    return `<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #21262d;">
+                        <span class="ticker">${p.ticker}</span>
+                        <span style="color:${color}">${dir} ${(p.confidence * 100).toFixed(0)}%</span>
+                    </div>`;
+                }).join('') || '<div style="color:#8b949e;">No high-confidence signals</div>';
+            }
+        } catch(e) { console.log('ML unavailable'); }
+    }
+
+    async function updateOptionsFlow() {
+        try {
+            const res = await fetch("/api/v1/sentiment/options/sentiment");
+            const json = await res.json();
+            if (json.success) {
+                const sent = document.getElementById("optionsSentiment");
+                const pcr = document.getElementById("optionsPCR");
+                
+                sent.innerText = json.data.overall_sentiment.toUpperCase();
+                sent.style.color = json.data.overall_sentiment === 'bullish' ? '#238636' : 
+                                  json.data.overall_sentiment === 'bearish' ? '#da3633' : '#8b949e';
+                pcr.innerText = `P/C: ${json.data.put_call_ratio.toFixed(2)}`;
+            }
+            
+            // Unusual activity
+            const unusualRes = await fetch("/api/v1/sentiment/options/unusual");
+            const unusualJson = await unusualRes.json();
+            if (unusualJson.success) {
+                const panel = document.getElementById("optionsUnusual");
+                panel.innerHTML = unusualJson.data.slice(0, 3).map(o => 
+                    `<div style="color:#f0883e;">⚡ ${o.ticker} ${o.type} $${o.strike} (${o.volume_ratio.toFixed(1)}x vol)</div>`
+                ).join('') || '<div style="color:#8b949e;">No unusual activity</div>';
+            }
+        } catch(e) { console.log('Options unavailable'); }
+    }
+
+    async function updateOnChain() {
+        try {
+            const res = await fetch("/api/v1/sentiment/onchain/summary");
+            const json = await res.json();
+            if (json.success) {
+                const panel = document.getElementById("onchainSummary");
+                panel.innerHTML = json.data.slice(0, 4).map(c => {
+                    const health = c.health_score >= 70 ? '🟢' : c.health_score >= 40 ? '🟡' : '🔴';
+                    return `<div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid #21262d;">
+                        <span>${c.ticker}</span>
+                        <span>${health} ${c.health_score}</span>
+                    </div>`;
+                }).join('') || '<div style="color:#8b949e;">No on-chain data</div>';
+            }
+        } catch(e) { console.log('On-chain unavailable'); }
+    }
+
+    // --- PRICE ALERTS ---
+    let userAlerts = JSON.parse(localStorage.getItem('priceAlerts') || '[]');
+    
+    async function createAlert() {
+        const ticker = document.getElementById("alertTicker").value;
+        const price = parseFloat(document.getElementById("alertPrice").value);
+        const condition = document.getElementById("alertCondition").value;
+        
+        if (!price || isNaN(price)) { alert('Enter a valid price'); return; }
+        
+        try {
+            const res = await fetch("/api/v1/sentiment/alerts", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, target_price: price, condition })
+            });
+            const json = await res.json();
+            if (json.success) {
+                userAlerts.push({ id: json.data.id, ticker, price, condition, active: true });
+                localStorage.setItem('priceAlerts', JSON.stringify(userAlerts));
+                renderAlerts();
+                document.getElementById("alertPrice").value = '';
+            }
+        } catch(e) {
+            // Fallback: local-only alert
+            userAlerts.push({ id: Date.now(), ticker, price, condition, active: true });
+            localStorage.setItem('priceAlerts', JSON.stringify(userAlerts));
+            renderAlerts();
+            document.getElementById("alertPrice").value = '';
+        }
+    }
+    
+    function renderAlerts() {
+        const panel = document.getElementById("activeAlerts");
+        panel.innerHTML = userAlerts.filter(a => a.active).map(a => 
+            `<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #21262d;">
+                <span>${a.ticker} ${a.condition === 'above' ? '≥' : '≤'} $${a.price}</span>
+                <span style="color:#da3633; cursor:pointer;" onclick="deleteAlert(${a.id})">✕</span>
+            </div>`
+        ).join('') || '<div style="color:#8b949e;">No active alerts</div>';
+    }
+    
+    function deleteAlert(id) {
+        userAlerts = userAlerts.filter(a => a.id !== id);
+        localStorage.setItem('priceAlerts', JSON.stringify(userAlerts));
+        renderAlerts();
+        // Also delete from server
+        fetch(`/api/v1/sentiment/alerts/${id}`, { method: 'DELETE' }).catch(() => {});
+    }
+    
+    async function checkAlerts() {
+        if (userAlerts.length === 0) return;
+        try {
+            const res = await fetch("/api/v1/sentiment/leaderboard");
+            const json = await res.json();
+            if (!json.success) return;
+            
+            const prices = {};
+            json.data.forEach(a => prices[a.ticker] = a.latestPrice);
+            
+            userAlerts.forEach(alert => {
+                if (!alert.active) return;
+                const currentPrice = prices[alert.ticker];
+                if (!currentPrice) return;
+                
+                const triggered = alert.condition === 'above' 
+                    ? currentPrice >= alert.price 
+                    : currentPrice <= alert.price;
+                    
+                if (triggered) {
+                    alert.active = false;
+                    localStorage.setItem('priceAlerts', JSON.stringify(userAlerts));
+                    renderAlerts();
+                    
+                    // Show notification
+                    if (Notification.permission === 'granted') {
+                        new Notification(`Price Alert: ${alert.ticker}`, {
+                            body: `${alert.ticker} hit $${currentPrice.toFixed(2)} (target: ${alert.condition} $${alert.price})`,
+                            icon: '📈'
+                        });
+                    }
+                    if (audioEnabled) audio.play().catch(() => {});
+                }
+            });
+        } catch(e) {}
+    }
+
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+
+    // Update new panels every 10 seconds
+    setInterval(() => {
+        updateFearGreed();
+        updateTwitterSentiment();
+        updateMLPredictions();
+        updateOptionsFlow();
+        updateOnChain();
+        checkAlerts();
+    }, 10000);
+    
+    // Initial load of new panels
+    setTimeout(() => {
+        updateFearGreed();
+        updateTwitterSentiment();
+        updateMLPredictions();
+        updateOptionsFlow();
+        updateOnChain();
+        renderAlerts();
+    }, 1000);
 </script>
 </body>
 </html>

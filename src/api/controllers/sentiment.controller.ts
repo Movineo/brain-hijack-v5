@@ -12,6 +12,7 @@ import { MLPredictorService } from '../../modules/analytics/ml-predictor.service
 import { OnChainService } from '../../modules/analytics/onchain.service';
 import { FearGreedService } from '../../modules/sentiment/fear-greed.service';
 import { OptionsFlowService } from '../../modules/analytics/options-flow.service';
+import { AlertsService } from '../../modules/notifications/alerts.service';
 
 // ORIGINAL: Single Coin Analysis (Keep for specific queries)
 export const getSentimentAnalysis = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -647,3 +648,85 @@ export const getOptionsMarketSentiment = async (request: FastifyRequest, reply: 
         return reply.status(500).send({ error: 'Failed to get options sentiment.' });
     }
 };
+
+// ============= PRICE ALERTS =============
+
+// 41. CREATE PRICE ALERT
+export const createPriceAlert = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { ticker, target_price, condition } = request.body as {
+        ticker: string;
+        target_price: number;
+        condition: 'above' | 'below';
+    };
+    try {
+        if (!ticker || !target_price || !condition) {
+            return reply.status(400).send({ error: 'Missing required fields: ticker, target_price, condition' });
+        }
+        const alert = await AlertsService.getInstance().createAlert({ ticker, target_price, condition });
+        return reply.send({ success: true, data: alert });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to create alert.' });
+    }
+};
+
+// 42. GET ACTIVE ALERTS
+export const getActiveAlerts = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const alerts = await AlertsService.getInstance().getActiveAlerts();
+        return reply.send({ success: true, data: alerts });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to get alerts.' });
+    }
+};
+
+// 43. GET ALERTS BY TICKER
+export const getAlertsByTicker = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { ticker } = request.params as { ticker: string };
+    try {
+        const alerts = await AlertsService.getInstance().getAlertsByTicker(ticker);
+        return reply.send({ success: true, data: alerts });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to get ticker alerts.' });
+    }
+};
+
+// 44. DELETE ALERT
+export const deletePriceAlert = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    try {
+        const deleted = await AlertsService.getInstance().deleteAlert(parseInt(id));
+        if (deleted) {
+            return reply.send({ success: true, message: 'Alert deleted' });
+        }
+        return reply.status(404).send({ error: 'Alert not found' });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to delete alert.' });
+    }
+};
+
+// 45. GET ALERT STATS
+export const getAlertStats = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const stats = await AlertsService.getInstance().getStats();
+        return reply.send({ success: true, data: stats });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to get alert stats.' });
+    }
+};
+
+// 46. GET TRIGGERED ALERT HISTORY
+export const getTriggeredAlerts = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const { limit = 20 } = request.query as { limit?: number };
+        const history = await AlertsService.getInstance().getTriggeredHistory(Math.min(limit, 100));
+        return reply.send({ success: true, data: history });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to get triggered alerts.' });
+    }
+}

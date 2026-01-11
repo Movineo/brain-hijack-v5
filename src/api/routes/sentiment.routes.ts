@@ -12,7 +12,8 @@ import {
     getMLPredictions, getMLAssetPrediction, getMLHighConfidence,
     getOnChainMetrics, getOnChainAssetMetrics, getNetworkSummary,
     getFearGreedIndex, getFearGreedHistory, getMarketMood,
-    getOptionsMetrics, getOptionsAssetMetrics, getUnusualOptionsFlows, getOptionsMarketSentiment
+    getOptionsMetrics, getOptionsAssetMetrics, getUnusualOptionsFlows, getOptionsMarketSentiment,
+    createPriceAlert, getActiveAlerts, getAlertsByTicker, deletePriceAlert, getAlertStats, getTriggeredAlerts
 } from '../controllers/sentiment.controller';
 
 export default async function sentimentRoutes(fastify: FastifyInstance) {
@@ -81,6 +82,14 @@ export default async function sentimentRoutes(fastify: FastifyInstance) {
     fastify.get('/options/unusual', getUnusualOptionsFlows);
     fastify.get('/options/sentiment', getOptionsMarketSentiment);
     fastify.get('/options/:ticker', getOptionsAssetMetrics);
+    
+    // PRICE ALERTS
+    fastify.post('/alerts', createPriceAlert);
+    fastify.get('/alerts', getActiveAlerts);
+    fastify.get('/alerts/stats', getAlertStats);
+    fastify.get('/alerts/history', getTriggeredAlerts);
+    fastify.get('/alerts/:ticker', getAlertsByTicker);
+    fastify.delete('/alerts/:id', deletePriceAlert);
     
     fastify.get('/:ticker', getSentimentAnalysis);
 }

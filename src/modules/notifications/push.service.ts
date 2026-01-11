@@ -16,17 +16,35 @@ const subscriptions: Set<string> = new Set();
 const subscriptionObjects: Map<string, PushSubscription> = new Map();
 
 // Configure web-push (generate keys with: npx web-push generate-vapid-keys)
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BKxJF7PdJ0d5K5s3Z9Y8pN8RvN5xZN5xZN5xZN5xZN5xZN5xZN5xZN5xZN5xZN5xZN5xZN5xZN5xZN5xZN5xZN5';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'abcdef1234567890abcdef1234567890abcdef12';
+// Default keys for development - override with env vars in production
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BIiDThAy2hwfHP4JBt5F0JKMKhDNPkOrcDv7s9IAev4Vg4CW-2y0mH4JfC8y5GL_YAoeUytHGA-AM07csjyNviQ';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'k-OSfYhaA_iee-QkgV-MdclLBVRiZRsYaGSM3StwKLo';
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@brainhijack.io';
 
-webpush.setVapidDetails(
-    VAPID_SUBJECT,
-    VAPID_PUBLIC_KEY,
-    VAPID_PRIVATE_KEY
-);
+// Check if VAPID is properly configured
+let vapidConfigured = false;
+
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY && VAPID_PUBLIC_KEY.length > 20 && VAPID_PRIVATE_KEY.length > 20) {
+    try {
+        webpush.setVapidDetails(
+            VAPID_SUBJECT,
+            VAPID_PUBLIC_KEY,
+            VAPID_PRIVATE_KEY
+        );
+        vapidConfigured = true;
+        console.log('[PUSH] ✅ VAPID configured successfully');
+    } catch (err) {
+        console.warn('[PUSH] ⚠️ Invalid VAPID keys - push notifications disabled');
+        vapidConfigured = false;
+    }
+} else {
+    console.warn('[PUSH] ⚠️ VAPID keys not set - push notifications disabled');
+}
 
 export const PushNotificationService = {
+    // Check if push is available
+    isConfigured: (): boolean => vapidConfigured,
+
     // Get VAPID public key for frontend
     getPublicKey: (): string => {
         return VAPID_PUBLIC_KEY;
@@ -59,6 +77,10 @@ export const PushNotificationService = {
 
     // Send notification to all subscribers
     sendToAll: async (title: string, body: string, data?: any): Promise<{ sent: number; failed: number }> => {
+        if (!vapidConfigured) {
+            return { sent: 0, failed: 0 };
+        }
+
         let sent = 0;
         let failed = 0;
 

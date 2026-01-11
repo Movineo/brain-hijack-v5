@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { query } from '../../shared/db';
+import { AlertsService } from '../notifications/alerts.service';
 
 export const IngestorService = {
     startIngestion: () => {
@@ -36,6 +37,10 @@ export const IngestorService = {
                 const ticker = message.product_id.replace('-', ''); 
                 const price = parseFloat(message.price);
                 const volume = parseFloat(message.last_size || '1.0');
+
+                // Feed price to AlertsService for price alerts (BTC format without USD)
+                const baseTicker = message.product_id.split('-')[0]; // BTC-USD -> BTC
+                AlertsService.getInstance().updatePrice(baseTicker, price);
 
                 // SILENCE: We removed the console.log pulse check to save CPU/Logs.
 

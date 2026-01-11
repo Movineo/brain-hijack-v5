@@ -11,6 +11,7 @@ import { WhaleService } from '../modules/whale/whale.service';
 import { TwitterService } from '../modules/sentiment/twitter.service';
 import { OnChainService } from '../modules/analytics/onchain.service';
 import { OptionsFlowService } from '../modules/analytics/options-flow.service';
+import { AlertsService } from '../modules/notifications/alerts.service';
 
 dotenv.config();
 
@@ -74,6 +75,7 @@ const start = async () => {
         TwitterService.startScanning(); // Twitter sentiment
         OnChainService.startMonitoring(); // On-chain analytics
         OptionsFlowService.startMonitoring(); // Options flow
+        AlertsService.getInstance().start(); // Price alerts checker
 
     } catch (err) {
         fastify.log.error(err);
