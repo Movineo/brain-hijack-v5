@@ -102,6 +102,7 @@
                     <th>ASSET</th>
                     <th>PRICE ($)</th>
                     <th>FORCE</th>
+                    <th>NARRATIVE</th>
                     <th>STATUS</th>
                 </tr>
             </thead>
@@ -216,11 +217,20 @@
                     const statusText = asset.isHijacking ? "⚠️ HIJACK" : "STABLE";
                     const statusColor = asset.isHijacking ? "#da3633" : "#238636";
 
+                    // NARRATIVE SCORING
+                    const narrativeScore = asset.narrativeScore || 0;
+                    let narrativeColor = "#8b949e"; // Grey (Neutral)
+                    if (narrativeScore > 0) narrativeColor = "#238636"; // Green (Bullish)
+                    if (narrativeScore < 0) narrativeColor = "#da3633"; // Red (Bearish)
+                    const narrativeDisplay = narrativeScore > 0 ? `+${narrativeScore}` : narrativeScore.toString();
+                    const headline = asset.latestHeadline || '--';
+
                     row.innerHTML = `
                         <td style="color: #8b949e;">#${index + 1}</td>
                         <td class="ticker">${asset.ticker}</td>
                         <td>${Number(asset.latestPrice).toFixed(4)}</td>
                         <td class="${forceClass}">${asset.hijackForce.toFixed(5)}</td>
+                        <td style="color:${narrativeColor}; cursor:help;" title="${headline}">${narrativeDisplay}</td>
                         <td style="color:${statusColor}">${statusText}</td>
                     `;
                     tbody.appendChild(row);

@@ -5,6 +5,7 @@ import sentimentRoutes from './routes/sentiment.routes';
 import dotenv from 'dotenv';
 import { IngestorService } from '../modules/ingestor/ingestor.service';
 import { TelegramService } from '../modules/notifications/telegram.service';
+import { NewsService } from '../modules/news/news.service';
 
 dotenv.config();
 
@@ -53,9 +54,9 @@ const start = async () => {
         console.log(`Brain Hijack v5 running at http://localhost:${port}`);
         console.log(`[Telegram] Status: ${TelegramService.isConfigured() ? '✅ Ready' : '⚠️ Not configured'}`);
 
-        // UPDATED: No arguments needed. 
-        // The Ingestor now automatically filters the CoinCap firehose for BTC, ETH, SOL, DOGE, PEPE.
-        IngestorService.startIngestion(); 
+        // Start Data Streams
+        IngestorService.startIngestion();
+        NewsService.startScanning(); // Phase 6: Narrative Velocity
 
     } catch (err) {
         fastify.log.error(err);

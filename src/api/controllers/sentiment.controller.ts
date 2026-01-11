@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { SentimentService } from '../../modules/sentiment/sentiment.service';
 import { PaperService } from '../../modules/execution/paper.service';
+import { NewsService } from '../../modules/news/news.service';
 
 // ORIGINAL: Single Coin Analysis (Keep for specific queries)
 export const getSentimentAnalysis = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -14,11 +15,22 @@ export const getSentimentAnalysis = async (request: FastifyRequest, reply: Fasti
     }
 };
 
-// NEW: Multi-Asset Leaderboard
+// NEW: Multi-Asset Leaderboard (with Narrative Fusion)
 export const getLeaderboard = async (request: FastifyRequest, reply: FastifyReply) => {
     try {
         const leaderboard = await SentimentService.getMarketLeaderboard();
-        return reply.send({ success: true, data: leaderboard });
+        
+        // ENRICHMENT: Add Narrative Data to each asset
+        const enrichedBoard = leaderboard.map((asset: any) => {
+            const news = NewsService.getNarrative(asset.ticker);
+            return {
+                ...asset,
+                narrativeScore: news.score,
+                latestHeadline: news.headline
+            };
+        });
+        
+        return reply.send({ success: true, data: enrichedBoard });
     } catch (error) {
         request.log.error(error);
         return reply.status(500).send({ error: 'Failed to generate leaderboard.' });
