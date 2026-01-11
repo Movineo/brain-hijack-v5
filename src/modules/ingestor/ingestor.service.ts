@@ -2,21 +2,22 @@ import WebSocket from 'ws';
 import { query } from '../../shared/db';
 
 export const IngestorService = {
-    startIngestion: (tickers: string[] = ['btcusdt', 'ethusdt', 'solusdt', 'bnbusdt', 'xrpusdt']) => {
+    // UPDATED: Removed 'pepeusdt' & 'xrpusdt' as they may not be on Binance.US
+    // Kept the majors: BTC, ETH, SOL, DOGE, BNB
+    startIngestion: (tickers: string[] = ['btcusdt', 'ethusdt', 'solusdt', 'bnbusdt', 'dogeusdt']) => {
         
-        // Format for Binance Combined Stream:
-        // streamName = <symbol>@aggTrade
-        // URL = wss://stream.binance.com:9443/stream?streams=btcusdt@aggTrade/ethusdt@aggTrade/...
-        
+        // Format for Binance Stream
         const streams = tickers.map(t => `${t.toLowerCase()}@aggTrade`).join('/');
-        const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+        
+        // CRITICAL FIX: Changed domain to 'stream.binance.us' to bypass US Geo-Block (Error 451)
+        const wsUrl = `wss://stream.binance.us:9443/stream?streams=${streams}`;
 
-        console.log(`[Ingestor] 🟢 Attempting connection to Panopticon Stream: ${wsUrl}`);
+        console.log(`[Ingestor] 🟢 Attempting connection to US Stream: ${wsUrl}`);
 
         const ws = new WebSocket(wsUrl);
 
         ws.on('open', () => {
-            console.log('[Ingestor] ✅ CONNECTION SUCCESSFUL! Hunting for anomalies...');
+            console.log('[Ingestor] ✅ CONNECTION SUCCESSFUL! Listening to US market...');
         });
 
         // DEBUG: Counter to log pulse check every 10 trades
@@ -26,10 +27,9 @@ export const IngestorService = {
             try {
                 const message = JSON.parse(data);
                 
-                // Validate data shape to prevent crashes on non-trade messages
+                // Validate data shape
                 if (!message.data) return;
 
-                // Combined stream format: { stream: 'btcusdt@aggTrade', data: { ...trade... } }
                 const trade = message.data;
                 const ticker = trade.s; // e.g., 'BTCUSDT'
                 const price = parseFloat(trade.p);
@@ -47,7 +47,6 @@ export const IngestorService = {
                         VALUES ($1, $2, $3, NOW())
                     `;
                     
-                    // We use the ticker symbol from the stream (e.g., BTCUSDT)
                     await query(sql, [ticker, price, volume]);
                     
                 } catch (dbErr) {
@@ -59,7 +58,8 @@ export const IngestorService = {
         });
 
         ws.on('error', (err) => {
-            console.error('[Ingestor] 💀 CONNECTION ERROR:', err);
+            // Log the error message clearly
+            console.error('[Ingestor] 💀 CONNECTION ERROR:', err.message);
         });
 
         ws.on('close', () => {
