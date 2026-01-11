@@ -1,22 +1,38 @@
 import { query } from '../../shared/db';
 import { TelegramService } from '../notifications/telegram.service';
+import { NewsService } from '../news/news.service';
 
 // CONFIG: Sniper Parameters
 const TRADE_SIZE_USD = 1000;        // Simulated USD per trade
-const ENTRY_THRESHOLD = 0.08;       // Hijack Force must be > this to BUY (real momentum)
+const ENTRY_THRESHOLD = 0.08;       // Hijack Force must be > this to BUY
 const EXIT_THRESHOLD = 0.01;        // Force drops below this = TAKE PROFIT
 const STOP_LOSS_PERCENT = -2.0;     // Max loss before we bail
+const TAKE_PROFIT_PERCENT = 3.0;    // Take profit at 3% gain
+const REQUIRE_NARRATIVE = true;     // Only trade if narrative confirms (true = safer)
 
 export const PaperService = {
-    // 1. MAIN LOOP: Evaluate entire market state
+    // 1. MAIN LOOP: Evaluate entire market state (now with narrative fusion)
     evaluateMarketState: async (leaderboard: any[]) => {
         for (const asset of leaderboard) {
             try {
-                // RULE: Only snipe if Force is VERY high (Strong Momentum)
-                if (asset.hijackForce > ENTRY_THRESHOLD) {
-                    await PaperService.openPosition(asset.ticker, asset.latestPrice, asset.hijackForce);
+                // Get narrative score for this asset
+                const narrative = NewsService.getNarrative(asset.ticker);
+                const narrativeScore = narrative.score;
+                
+                // SMART ENTRY: Force HIGH + Narrative confirms direction
+                const forceHigh = asset.hijackForce > ENTRY_THRESHOLD;
+                const narrativeConfirms = !REQUIRE_NARRATIVE || narrativeScore >= 0; // Bullish or neutral news
+                
+                if (forceHigh && narrativeConfirms) {
+                    await PaperService.openPosition(
+                        asset.ticker, 
+                        asset.latestPrice, 
+                        asset.hijackForce,
+                        narrativeScore
+                    );
                 } 
-                // RULE: Check if we need to close existing positions
+                
+                // Always check exits
                 await PaperService.managePositions(asset.ticker, asset.latestPrice, asset.hijackForce);
             } catch (err) {
                 console.error(`[SNIPER] Error processing ${asset.ticker}:`, err);
@@ -24,8 +40,8 @@ export const PaperService = {
         }
     },
 
-    // 2. ENTRY: Open a new position
-    openPosition: async (ticker: string, price: number, force: number) => {
+    // 2. ENTRY: Open a new position (now logs narrative)
+    openPosition: async (ticker: string, price: number, force: number, narrativeScore: number = 0) => {
         // Check if we already have an OPEN trade for this ticker
         const existing = await query(
             `SELECT id FROM paper_trades WHERE ticker = $1 AND status = 'OPEN'`, 
@@ -42,15 +58,17 @@ export const PaperService = {
             [ticker, price, quantity, force]
         );
         
-        console.log(`[SNIPER] 🔫 BANG! Bought ${ticker} at $${price.toFixed(4)} (Force: ${force.toFixed(4)})`);
+        console.log(`[SNIPER] 🔫 BANG! Bought ${ticker} at $${price.toFixed(4)} (Force: ${force.toFixed(4)}, News: ${narrativeScore})`);
         
-        // Optional: Alert on Telegram
+        // Archive the hijack event
+        await PaperService.archiveHijack(ticker, price, force, narrativeScore, 'ENTRY');
+        
+        // Alert on Telegram
         await TelegramService.sendHijackAlert(ticker, price, force);
     },
 
-    // 3. EXIT MANAGEMENT: Check if we should close positions
+    // 3. EXIT MANAGEMENT: Now with take-profit
     managePositions: async (ticker: string, currentPrice: number, currentForce: number) => {
-        // Find open trade for this ticker
         const res = await query(
             `SELECT * FROM paper_trades WHERE ticker = $1 AND status = 'OPEN'`, 
             [ticker]
@@ -61,23 +79,26 @@ export const PaperService = {
         const trade = res.rows[0];
         const entryPrice = parseFloat(trade.entry_price);
         const quantity = parseFloat(trade.quantity);
-
-        // Calculate PnL percentage
         const pnlPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
 
-        // EXIT RULES:
         let shouldClose = false;
         let reason = "";
 
-        // 1. Momentum died = Take profit (or small loss)
-        if (currentForce < EXIT_THRESHOLD) {
+        // EXIT RULES (Priority order):
+        // 1. Take Profit - Lock in gains
+        if (pnlPercent >= TAKE_PROFIT_PERCENT) {
             shouldClose = true;
-            reason = "MOMENTUM_DIED";
-        } 
-        // 2. Stop Loss hit
+            reason = "TAKE_PROFIT";
+        }
+        // 2. Stop Loss - Cut losses
         else if (pnlPercent <= STOP_LOSS_PERCENT) {
             shouldClose = true;
             reason = "STOP_LOSS";
+        }
+        // 3. Momentum died - Exit regardless of P&L
+        else if (currentForce < EXIT_THRESHOLD) {
+            shouldClose = true;
+            reason = "MOMENTUM_DIED";
         }
 
         if (shouldClose) {
@@ -92,10 +113,27 @@ export const PaperService = {
 
             const emoji = profitUsd >= 0 ? '💰' : '💸';
             console.log(`[SNIPER] ${emoji} CLOSED ${ticker}. P&L: $${profitUsd.toFixed(2)} (${reason})`);
+            
+            // Archive the exit event
+            await PaperService.archiveHijack(ticker, currentPrice, currentForce, 0, reason);
         }
     },
 
-    // 4. STATS: Get trading performance
+    // 4. ARCHIVE: Store hijack events for historical analysis
+    archiveHijack: async (ticker: string, price: number, force: number, narrativeScore: number, eventType: string) => {
+        try {
+            await query(
+                `INSERT INTO hijack_archive (ticker, price, hijack_force, narrative_score, event_type, recorded_at)
+                 VALUES ($1, $2, $3, $4, $5, NOW())`,
+                [ticker, price, force, narrativeScore, eventType]
+            );
+        } catch (err) {
+            // Table might not exist yet - silently fail
+            console.error('[ARCHIVE] Failed to log event:', err);
+        }
+    },
+
+    // 5. STATS: Get trading performance
     getStats: async () => {
         const result = await query(`
             SELECT 
@@ -120,5 +158,21 @@ export const PaperService = {
             totalPnL: parseFloat(stats.total_pnl).toFixed(2),
             openPositions: parseInt(stats.open_positions)
         };
+    },
+
+    // 6. P&L HISTORY: Get daily P&L for charting
+    getPnLHistory: async () => {
+        const result = await query(`
+            SELECT 
+                DATE(closed_at) as date,
+                SUM(profit) as daily_pnl,
+                COUNT(*) as trades
+            FROM paper_trades 
+            WHERE status = 'CLOSED' AND closed_at IS NOT NULL
+            GROUP BY DATE(closed_at)
+            ORDER BY date DESC
+            LIMIT 30
+        `);
+        return result.rows.reverse(); // Oldest first for charts
     }
 };

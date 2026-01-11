@@ -79,3 +79,26 @@ export const getPaperStats = async (request: FastifyRequest, reply: FastifyReply
         return reply.status(500).send({ error: 'Failed to fetch stats.' });
     }
 };
+
+// 6. P&L History for Charts
+export const getPnLHistory = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const history = await PaperService.getPnLHistory();
+        return reply.send({ success: true, data: history });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to fetch P&L history.' });
+    }
+};
+
+// 7. Hijack Archive
+export const getHijackArchive = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const sql = `SELECT * FROM hijack_archive ORDER BY recorded_at DESC LIMIT 50`;
+        const result = await require('../../shared/db').query(sql);
+        return reply.send({ success: true, data: result.rows });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to fetch archive.' });
+    }
+};

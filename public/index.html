@@ -172,6 +172,12 @@
                 <div id="statOpen" style="font-weight:bold; color:#58a6ff;">0</div>
             </div>
         </div>
+        
+        <!-- P&L Chart -->
+        <div style="height: 150px; margin-bottom: 15px;">
+            <canvas id="pnlChart"></canvas>
+        </div>
+        
         <div class="table-wrapper">
             <table>
                 <thead>
@@ -196,6 +202,7 @@
     let audioEnabled = false;
     let modalChart = null;
     let heatmapChart = null;
+    let pnlChart = null;
 
     function enableAudio() {
         audio.play().then(() => { audio.pause(); audio.currentTime = 0; audioEnabled = true; document.getElementById('startOverlay').style.display = 'none'; });
@@ -338,8 +345,58 @@
                     tbody.appendChild(row);
                 });
             }
+
+            // Fetch P&L history for chart
+            const pnlRes = await fetch("/api/v1/sentiment/pnl-history");
+            const pnlJson = await pnlRes.json();
+            
+            if (pnlJson.success && pnlJson.data.length > 0) {
+                updatePnLChart(pnlJson.data);
+            }
         } catch (err) {
             // Silently fail - table might not exist yet
+        }
+    }
+
+    // --- P&L CHART ---
+    function updatePnLChart(data) {
+        const ctx = document.getElementById("pnlChart").getContext('2d');
+        const labels = data.map(d => d.date ? d.date.substring(5) : ''); // MM-DD format
+        const pnlValues = data.map(d => parseFloat(d.daily_pnl || 0));
+        
+        // Calculate cumulative P&L
+        let cumulative = 0;
+        const cumulativeData = pnlValues.map(v => { cumulative += v; return cumulative; });
+
+        if (pnlChart) {
+            pnlChart.data.labels = labels;
+            pnlChart.data.datasets[0].data = cumulativeData;
+            pnlChart.update('none');
+        } else {
+            pnlChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Cumulative P&L',
+                        data: cumulativeData,
+                        borderColor: cumulative >= 0 ? '#238636' : '#da3633',
+                        backgroundColor: cumulative >= 0 ? 'rgba(35,134,54,0.1)' : 'rgba(218,54,51,0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 9 } } },
+                        y: { grid: { color: '#21262d' }, ticks: { color: '#8b949e', callback: v => '$' + v } }
+                    }
+                }
+            });
         }
     }
 
