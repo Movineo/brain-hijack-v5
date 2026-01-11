@@ -3,8 +3,8 @@ import { TelegramService } from '../notifications/telegram.service';
 
 // CONFIG: Sniper Parameters
 const TRADE_SIZE_USD = 1000;        // Simulated USD per trade
-const ENTRY_THRESHOLD = 0.1;        // Hijack Force must be > this to BUY
-const EXIT_THRESHOLD = 0.02;        // Force drops below this = TAKE PROFIT
+const ENTRY_THRESHOLD = 0.01;       // Hijack Force must be > this to BUY (lowered for testing)
+const EXIT_THRESHOLD = 0.005;       // Force drops below this = TAKE PROFIT
 const STOP_LOSS_PERCENT = -2.0;     // Max loss before we bail
 
 export const PaperService = {
