@@ -3,64 +3,42 @@ import { query } from '../../shared/db';
 
 export const IngestorService = {
     startIngestion: () => {
-        // COINBASE: The US-Friendly Giant.
         const wsUrl = 'wss://ws-feed.exchange.coinbase.com';
         
-        // Coinbase uses hyphens: BTC-USD, not BTCUSDT
-        const assets = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'DOGE-USD'];
+        // THE DRAGNET: Expanded Asset List (Top 20 Volatile Assets on Coinbase)
+        const assets = [
+            'BTC-USD', 'ETH-USD', 'SOL-USD', 'DOGE-USD', // The Majors
+            'SHIB-USD', 'AVAX-USD', 'LINK-USD', 'UNI-USD', 'MATIC-USD', // The Alts
+            'LTC-USD', 'XRP-USD', 'ADA-USD', 'DOT-USD', 'BCH-USD', // The Classics
+            'PEPE-USD', 'SUI-USD', 'APT-USD', 'ARB-USD', 'OP-USD' // The New Guard
+        ];
 
-        console.log(`[Ingestor] 🟢 Connecting to Coinbase Stream...`);
+        console.log(`[Ingestor] 🟢 Connecting to Coinbase Stream for ${assets.length} assets...`);
 
         const ws = new WebSocket(wsUrl);
 
         ws.on('open', () => {
-            console.log('[Ingestor] ✅ CONNECTED! Sending subscription...');
-            
-            // Coinbase requires a formal subscription packet
+            console.log('[Ingestor] ✅ CONNECTED! Subscribing to market feed...');
             const msg = {
                 type: "subscribe",
                 product_ids: assets,
                 channels: ["ticker"]
             };
-            
             ws.send(JSON.stringify(msg));
         });
-
-        let tradeCount = 0;
 
         ws.on('message', async (data: string) => {
             try {
                 const message = JSON.parse(data);
-
-                // We only care about 'ticker' updates
                 if (message.type !== 'ticker') return;
 
-                /* Coinbase Data Shape:
-                   {
-                       type: 'ticker',
-                       product_id: 'BTC-USD',
-                       price: '95000.00',
-                       volume_24h: '10000',
-                       ...
-                   }
-                */
-
-                // 1. Normalize Ticker (Remove the hyphen to match our DB: BTC-USD -> BTCUSD)
-                const rawTicker = message.product_id; // e.g. BTC-USD
-                const ticker = rawTicker.replace('-', ''); // BTCUSD
-
+                // Normalize Ticker: BTC-USD -> BTCUSD
+                const ticker = message.product_id.replace('-', ''); 
                 const price = parseFloat(message.price);
-                // Coinbase sends 24h volume in ticker, or last_size for immediate trade size.
-                // We'll use last_size (immediate volume) if available, else 1.0
                 const volume = parseFloat(message.last_size || '1.0');
 
-                // DEBUG LOG
-                tradeCount++;
-                if (tradeCount % 10 === 0) {
-                    console.log(`[Ingestor] 💓 Pulse: ${ticker} @ $${price}`);
-                }
+                // SILENCE: We removed the console.log pulse check to save CPU/Logs.
 
-                // 2. Save to DB
                 const sql = `
                     INSERT INTO sentiment_metrics (ticker, sentiment_score, volume, time) 
                     VALUES ($1, $2, $3, NOW())

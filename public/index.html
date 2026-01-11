@@ -3,45 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRAXIS | Panopticon</title>
+    <title>PRAXIS | Command Center</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #0d1117; color: #c9d1d9; font-family: "Courier New", monospace; padding: 20px; margin: 0; }
-        .container { max-width: 1000px; margin: 0 auto; }
         
-        /* HEADER */
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #30363d; padding-bottom: 15px; margin-bottom: 20px; }
+        /* LAYOUT GRID */
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            display: grid; 
+            grid-template-columns: 2fr 1fr; /* 2/3 Table, 1/3 Heatmap */
+            gap: 20px; 
+        }
+        
+        /* HEADER (Spans full width) */
+        .header { 
+            grid-column: 1 / -1; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 2px solid #30363d; 
+            padding-bottom: 15px; 
+            margin-bottom: 10px; 
+        }
         .status-box { padding: 5px 15px; border-radius: 4px; font-weight: bold; font-size: 0.8em; text-transform: uppercase; }
         .normal { background-color: #238636; color: white; }
         .critical { background-color: #da3633; color: white; animation: pulse 0.8s infinite; }
 
-        /* TABLE GRID */
+        /* PANELS */
+        .panel { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 15px; }
+        .panel-title { font-weight: bold; color: #8b949e; margin-bottom: 15px; border-bottom: 1px solid #30363d; padding-bottom: 5px; text-transform: uppercase; font-size: 0.9em; }
+
+        /* TABLE */
         table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; border-bottom: 1px solid #30363d; padding: 10px; color: #8b949e; font-size: 0.9em; }
-        td { padding: 15px 10px; border-bottom: 1px solid #21262d; font-size: 1.1em; }
-        
-        /* CLICKABLE ROWS */
-        tr.asset-row:hover { background-color: #161b22; cursor: pointer; }
+        th { text-align: left; border-bottom: 1px solid #30363d; padding: 10px; color: #8b949e; font-size: 0.8em; }
+        td { padding: 8px 10px; border-bottom: 1px solid #21262d; font-size: 0.9em; }
+        tr.asset-row:hover { background-color: #21262d; cursor: pointer; }
+
+        /* HEATMAP */
+        #heatmapContainer { position: relative; height: 400px; }
 
         /* HIGHLIGHTS */
         .ticker { font-weight: bold; color: #58a6ff; }
-        .force-high { color: #da3633; font-weight: bold; text-shadow: 0 0 5px rgba(218, 54, 51, 0.4); }
-        .force-low { color: #238636; opacity: 0.6; }
+        .force-high { color: #da3633; font-weight: bold; }
+        .force-low { color: #238636; opacity: 0.7; }
 
-        /* MODAL (THE MICROSCOPE) */
+        /* MODAL */
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); }
         .modal-content { background-color: #0d1117; margin: 10% auto; padding: 20px; border: 1px solid #30363d; width: 80%; max-width: 800px; border-radius: 8px; }
-        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
-        .close:hover { color: white; }
+        .close { color: #aaa; float: right; font-size: 28px; cursor: pointer; }
 
-        #startOverlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); color: #00ff00;
-            display: flex; justify-content: center; align-items: center;
-            font-size: 2em; cursor: pointer; z-index: 999; flex-direction: column;
-        }
-
+        #startOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); color: #00ff00; display: flex; justify-content: center; align-items: center; font-size: 2em; cursor: pointer; z-index: 999; flex-direction: column; }
+        
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+        /* MOBILE RESPONSIVE */
+        @media (max-width: 800px) { .container { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -49,14 +67,14 @@
 <audio id="alertSound" src="https://www.soundjay.com/buttons/beep-01a.mp3" preload="auto"></audio>
 
 <div id="startOverlay" onclick="enableAudio()">
-    <div>[ INITIALIZE PANOPTICON ]</div>
-    <div style="font-size: 0.5em; margin-top: 10px; color: #888;">Click to connect to neural stream</div>
+    <div>[ INITIALIZE PRAXIS ]</div>
+    <div style="font-size: 0.5em; margin-top: 10px; color: #888;">Connecting to Coinbase Stream...</div>
 </div>
 
 <div id="chartModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="closeModal()">&times;</span>
-        <h2 id="modalTitle">// INSPECTING ASSET</h2>
+        <h2 id="modalTitle" style="color:#58a6ff;"></h2>
         <canvas id="modalCanvas"></canvas>
     </div>
 </div>
@@ -64,154 +82,169 @@
 <div class="container">
     <div class="header">
         <div>
-            <h1 style="margin:0;">// MARKET PANOPTICON</h1>
-            <div style="font-size: 0.8em; color:#8b949e; margin-top:5px;">TRACKING: BTC, ETH, SOL, DOGE, PEPE</div>
+            <h1 style="margin:0; font-size: 1.5em;">// PRAXIS COMMAND</h1>
+            <div style="font-size: 0.8em; color:#8b949e;">MONITORING 20+ ASSETS [COINBASE STREAM]</div>
         </div>
-        <div id="globalStatus" class="status-box normal">SYSTEM SECURE</div>
+        <div id="globalStatus" class="status-box normal">SECURE</div>
     </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>RANK</th>
-                <th>ASSET</th>
-                <th>PRICE ($)</th>
-                <th>HIJACK FORCE</th>
-                <th>STATUS</th>
-            </tr>
-        </thead>
-        <tbody id="gridBody">
-            </tbody>
-    </table>
+    <div class="panel">
+        <div class="panel-title">Hijack Force Leaderboard</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>RK</th>
+                    <th>ASSET</th>
+                    <th>PRICE ($)</th>
+                    <th>FORCE</th>
+                    <th>STATUS</th>
+                </tr>
+            </thead>
+            <tbody id="gridBody"></tbody>
+        </table>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">1-Hour Volume Pressure</div>
+        <div id="heatmapContainer">
+            <canvas id="heatmapCanvas"></canvas>
+        </div>
+    </div>
 </div>
 
 <script>
     const audio = document.getElementById("alertSound");
     let isAlarmActive = false;
     let audioEnabled = false;
-    let modalChart = null; // Stores the chart instance
+    let modalChart = null;
+    let heatmapChart = null;
 
     function enableAudio() {
-        audio.play().then(() => {
-            audio.pause(); audio.currentTime = 0; audioEnabled = true;
-            document.getElementById('startOverlay').style.display = 'none';
-        }).catch(e => console.error(e));
+        audio.play().then(() => { audio.pause(); audio.currentTime = 0; audioEnabled = true; document.getElementById('startOverlay').style.display = 'none'; });
     }
 
-    // --- MODAL FUNCTIONS ---
+    // --- MODAL LOGIC (The Microscope) ---
     async function openModal(ticker) {
-        const modal = document.getElementById("chartModal");
-        const title = document.getElementById("modalTitle");
+        document.getElementById("chartModal").style.display = "block";
+        document.getElementById("modalTitle").innerText = `// ${ticker} INSPECTION`;
         const ctx = document.getElementById("modalCanvas").getContext('2d');
-        
-        modal.style.display = "block";
-        title.innerText = `// INSPECTING [${ticker}]`;
-
-        // Destroy old chart if exists
         if (modalChart) modalChart.destroy();
 
-        // Fetch Data for specific asset
+        // Fetch history
         const res = await fetch(`/api/v1/sentiment/${ticker}`);
         const json = await res.json();
         
-        if (json.success) {
-            // Note: Currently requires SentimentService to return simple 'history' array.
-            // If your service returns { score, volume }, we map it here:
-            const history = json.data.history || json.data || []; 
-            
-            // Handle different data shapes based on your exact Service return
-            const prices = Array.isArray(history) ? history.map(h => h.score || h) : [];
-            const labels = prices.map(() => '');
+        // Handle data shape
+        const history = json.data.history || json.data || [];
+        const prices = Array.isArray(history) ? history.map(h => h.score || h) : [];
 
-            modalChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: `${ticker} Price Action`,
-                        data: prices,
-                        borderColor: '#58a6ff',
-                        backgroundColor: 'rgba(88, 166, 255, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.1,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: { y: { grid: { color: "#30363d" } }, x: { display: false } },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
+        modalChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: prices.map(() => ''),
+                datasets: [{ data: prices, borderColor: '#58a6ff', backgroundColor: 'rgba(88, 166, 255, 0.1)', borderWidth: 2, tension: 0.1, fill: true }]
+            },
+            options: { responsive: true, scales: { x: { display: false }, y: { grid: { color: "#30363d" } } }, plugins: { legend: { display: false } } }
+        });
     }
 
-    function closeModal() {
-        document.getElementById("chartModal").style.display = "none";
-    }
+    function closeModal() { document.getElementById("chartModal").style.display = "none"; }
+    window.onclick = function(event) { if (event.target == document.getElementById("chartModal")) closeModal(); }
 
-    // --- DASHBOARD LOOP ---
+    // --- DASHBOARD CORE ---
     async function updateDashboard() {
         try {
+            // 1. UPDATE LEADERBOARD
             const res = await fetch("/api/v1/sentiment/leaderboard");
             const json = await res.json();
             
             if (json.success) {
-                const assets = json.data; 
+                const assets = json.data;
                 const tbody = document.getElementById("gridBody");
-                tbody.innerHTML = ""; 
-
+                tbody.innerHTML = "";
                 let globalPanic = false;
 
                 assets.forEach((asset, index) => {
                     const row = document.createElement("tr");
-                    row.className = "asset-row"; // Make it clickable styling
-                    
-                    // CLICK TRIGGER: Opens the modal for this ticker
+                    row.className = "asset-row";
                     row.onclick = () => openModal(asset.ticker);
-
-                    const forceClass = asset.isHijacking ? "force-high" : "force-low";
-                    const statusText = asset.isHijacking ? "⚠️ HIJACK" : "STABLE";
                     
                     if (asset.isHijacking) globalPanic = true;
+                    
+                    const forceClass = asset.isHijacking ? "force-high" : "force-low";
+                    const statusText = asset.isHijacking ? "⚠️ HIJACK" : "STABLE";
+                    const statusColor = asset.isHijacking ? "#da3633" : "#238636";
 
                     row.innerHTML = `
                         <td style="color: #8b949e;">#${index + 1}</td>
                         <td class="ticker">${asset.ticker}</td>
                         <td>${Number(asset.latestPrice).toFixed(4)}</td>
                         <td class="${forceClass}">${asset.hijackForce.toFixed(5)}</td>
-                        <td class="${forceClass}">${statusText}</td>
+                        <td style="color:${statusColor}">${statusText}</td>
                     `;
                     tbody.appendChild(row);
                 });
 
-                // Global Alert Logic
                 const statusBox = document.getElementById("globalStatus");
                 if (globalPanic) {
-                    statusBox.innerText = "WARNING: HIJACK DETECTED";
-                    statusBox.className = "status-box critical";
-                    if (audioEnabled && !isAlarmActive) {
-                        audio.play().catch(e => {});
-                        isAlarmActive = true;
-                    }
+                    statusBox.innerText = "HIJACK DETECTED"; statusBox.className = "status-box critical";
+                    if (audioEnabled && !isAlarmActive) { audio.play().catch(e => {}); isAlarmActive = true; }
                 } else {
-                    statusBox.innerText = "SYSTEM SECURE";
-                    statusBox.className = "status-box normal";
-                    isAlarmActive = false;
+                    statusBox.innerText = "SECURE"; statusBox.className = "status-box normal"; isAlarmActive = false;
                 }
             }
+
+            // 2. UPDATE HEATMAP (Phase 4 Feature)
+            const heatRes = await fetch("/api/v1/sentiment/heatmap");
+            const heatJson = await heatRes.json();
+            
+            if (heatJson.success && heatJson.data.length > 0) {
+                updateHeatmap(heatJson.data);
+            }
+
         } catch (err) { console.error("Sync lost", err); }
     }
-    
-    // Close modal if clicking outside box
-    window.onclick = function(event) {
-        const modal = document.getElementById("chartModal");
-        if (event.target == modal) {
-            modal.style.display = "none";
+
+    function updateHeatmap(data) {
+        const ctx = document.getElementById("heatmapCanvas").getContext('2d');
+        const labels = data.map(d => d.ticker);
+        const vols = data.map(d => d.total_vol);
+
+        if (heatmapChart) {
+            heatmapChart.data.labels = labels;
+            heatmapChart.data.datasets[0].data = vols;
+            heatmapChart.update('none'); // 'none' mode prevents annoying animations on every update
+        } else {
+            heatmapChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{ 
+                        label: 'Hourly Volume', 
+                        data: vols, 
+                        backgroundColor: '#238636', 
+                        borderRadius: 4,
+                        barThickness: 10
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    scales: { 
+                        y: { display: false }, 
+                        x: { 
+                            grid: { display: false }, 
+                            ticks: { color: '#8b949e', font: { size: 10 } } 
+                        } 
+                    }, 
+                    plugins: { legend: { display: false } } 
+                }
+            });
         }
     }
 
-    setInterval(updateDashboard, 1000);
+    // Refresh every 1.5 seconds
+    setInterval(updateDashboard, 1500);
 </script>
 </body>
 </html>

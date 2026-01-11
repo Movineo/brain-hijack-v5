@@ -23,3 +23,23 @@ export const getLeaderboard = async (request: FastifyRequest, reply: FastifyRepl
         return reply.status(500).send({ error: 'Failed to generate leaderboard.' });
     }
 };
+
+// 3. Market Heatmap (Volume Distribution)
+export const getMarketHeatmap = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        // We aggregate volume for all coins over the last hour
+        const sql = `
+            SELECT ticker, SUM(volume) as total_vol 
+            FROM sentiment_metrics 
+            WHERE time >= NOW() - INTERVAL '60 minutes'
+            GROUP BY ticker 
+            ORDER BY total_vol DESC 
+            LIMIT 10;
+        `;
+        const result = await require('../../shared/db').query(sql);
+        return reply.send({ success: true, data: result.rows });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to generate heatmap.' });
+    }
+};
