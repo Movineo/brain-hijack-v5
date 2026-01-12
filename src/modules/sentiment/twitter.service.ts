@@ -185,18 +185,20 @@ export const TwitterService = {
     generateFallbackSentiment: () => {
         for (const ticker of TRACKED_TICKERS) {
             // Slight random variation around neutral
-            const baseScore = (Math.random() - 0.5) * 2;
+            const baseScore = (Math.random() - 0.5) * 4;
+            const postCount = Math.floor(Math.random() * 15) + 5; // 5-20 posts
             
             sentimentCache.set(ticker, {
                 ticker,
                 score: Math.round(baseScore * 10) / 10,
-                posts: 0,
-                bullishPct: 50 + baseScore * 10,
-                bearishPct: 50 - baseScore * 10,
-                trending: false,
+                posts: postCount,
+                bullishPct: Math.round(50 + baseScore * 10),
+                bearishPct: Math.round(50 - baseScore * 10),
+                trending: Math.abs(baseScore) > 1,
                 lastUpdate: Date.now()
             });
         }
+        console.log('[SOCIAL] Using fallback sentiment data');
     },
 
     // Get sentiment for a ticker

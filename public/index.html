@@ -172,7 +172,7 @@
         </div>
 
         <div class="panel">
-            <div class="panel-title">� Social Sentiment</div>
+            <div class="panel-title">📰 Social Sentiment</div>
             <div id="twitterPanel" style="padding: 10px;">
                 <div id="twitterTrending" style="margin-bottom: 10px;"></div>
                 <div id="twitterMentions" style="font-size: 0.8em; color: #8b949e;"></div>
@@ -716,8 +716,8 @@
                     </div>`;
                 }).join('');
                 
-                const total = json.data.reduce((s, t) => s + (t.sentiment?.tweets || 0), 0);
-                mentions.innerText = `${total} tweets analyzed`;
+                const total = json.data.reduce((s, t) => s + (t.sentiment?.posts || 0), 0);
+                mentions.innerText = `${total} posts analyzed`;
             } else {
                 document.getElementById("twitterTrending").innerHTML = '<div style="color:#8b949e;">Scanning Twitter...</div>';
             }
