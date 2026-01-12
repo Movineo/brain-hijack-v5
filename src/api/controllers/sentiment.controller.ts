@@ -466,15 +466,15 @@ export const getTwitterSentiment = async (request: FastifyRequest, reply: Fastif
     }
 };
 
-// 26. GET TWITTER SENTIMENT FOR SPECIFIC ASSET
+// 26. GET SOCIAL SENTIMENT FOR SPECIFIC ASSET
 export const getTwitterAssetSentiment = async (request: FastifyRequest, reply: FastifyReply) => {
     const { ticker } = request.params as { ticker: string };
     try {
         const sentiment = TwitterService.getSentiment(ticker);
-        return reply.send({ success: true, data: { ticker, ...sentiment } });
+        return reply.send({ success: true, data: sentiment });
     } catch (error) {
         request.log.error(error);
-        return reply.status(500).send({ error: 'Failed to get asset Twitter sentiment.' });
+        return reply.status(500).send({ error: 'Failed to get asset social sentiment.' });
     }
 };
 
