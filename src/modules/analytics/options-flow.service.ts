@@ -1,6 +1,6 @@
 // OPTIONS FLOW SERVICE
-// Tracks unusual options activity for sentiment signals
-// Note: Real options data requires paid APIs (e.g., Deribit API for crypto options)
+// Real-time crypto options data from Deribit API (free, no auth required for public endpoints)
+// Deribit API Docs: https://docs.deribit.com/
 
 interface OptionsFlow {
     ticker: string;
@@ -16,11 +16,11 @@ interface OptionsFlow {
 
 interface OptionsMetrics {
     ticker: string;
-    putCallRatio: number;       // < 1 = bullish, > 1 = bearish
+    putCallRatio: number;
     totalCallVolume: number;
     totalPutVolume: number;
-    maxPainPrice: number;       // Price where most options expire worthless
-    impliedVolatility: number;  // IV percentage
+    maxPainPrice: number;
+    impliedVolatility: number;
     openInterest: number;
     sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
     lastUpdate: Date;
@@ -31,128 +31,164 @@ const optionsCache: Map<string, OptionsMetrics> = new Map();
 const recentFlows: OptionsFlow[] = [];
 const MAX_FLOWS = 100;
 
-// Tracked crypto options assets (with active options markets)
-const TRACKED_ASSETS = ['BTC', 'ETH', 'SOL'];
+// Deribit API base URL (public endpoints, no auth needed)
+const DERIBIT_API = 'https://www.deribit.com/api/v2/public';
+
+// Tracked crypto options assets
+const TRACKED_ASSETS = ['BTC', 'ETH'];
 
 export const OptionsFlowService = {
     // Start options flow monitoring
     startMonitoring: () => {
-        console.log('[OPTIONS] 📊 Options flow monitoring started');
+        console.log('[OPTIONS] 📊 Connecting to Deribit API for real options data...');
         
-        // Initial data
-        OptionsFlowService.updateAllMetrics();
+        // Initial fetch
+        OptionsFlowService.fetchAllMetrics();
         
-        // Update every 5 minutes
+        // Update every 2 minutes (Deribit rate limits are generous)
         setInterval(() => {
-            OptionsFlowService.updateAllMetrics();
-        }, 5 * 60 * 1000);
-        
-        // Simulate unusual flows every 15 minutes
-        setInterval(() => {
-            OptionsFlowService.simulateUnusualFlow();
-        }, 15 * 60 * 1000);
+            OptionsFlowService.fetchAllMetrics();
+        }, 2 * 60 * 1000);
     },
 
-    // Update metrics for all tracked assets
-    updateAllMetrics: () => {
-        TRACKED_ASSETS.forEach(ticker => {
-            const metrics = OptionsFlowService.simulateMetrics(ticker);
-            optionsCache.set(ticker, metrics);
-        });
-        
-        console.log(`[OPTIONS] Updated metrics for ${TRACKED_ASSETS.length} assets`);
-    },
-
-    // Simulate options metrics (replace with real Deribit API in production)
-    simulateMetrics: (ticker: string): OptionsMetrics => {
-        // Base values vary by asset
-        const baseMetrics: Record<string, { pcr: number; iv: number; oi: number }> = {
-            'BTC': { pcr: 0.7, iv: 55, oi: 500000 },
-            'ETH': { pcr: 0.8, iv: 65, oi: 300000 },
-            'SOL': { pcr: 0.9, iv: 90, oi: 50000 }
-        };
-        
-        const base = baseMetrics[ticker] || { pcr: 0.75, iv: 60, oi: 100000 };
-        const variation = () => 0.9 + Math.random() * 0.2;
-        
-        const putCallRatio = base.pcr * variation();
-        const totalCallVolume = Math.floor(base.oi * 0.3 * variation());
-        const totalPutVolume = Math.floor(totalCallVolume * putCallRatio);
-        
-        // Determine sentiment from put/call ratio
-        let sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
-        if (putCallRatio < 0.7) sentiment = 'BULLISH';
-        else if (putCallRatio > 1.0) sentiment = 'BEARISH';
-        
-        // Simulate max pain (typically near current price)
-        const basePrices: Record<string, number> = {
-            'BTC': 45000,
-            'ETH': 2500,
-            'SOL': 120
-        };
-        const basePrice = basePrices[ticker] || 100;
-        const maxPainPrice = basePrice * (0.95 + Math.random() * 0.1);
-        
-        return {
-            ticker,
-            putCallRatio: Math.round(putCallRatio * 100) / 100,
-            totalCallVolume,
-            totalPutVolume,
-            maxPainPrice: Math.round(maxPainPrice),
-            impliedVolatility: Math.round(base.iv * variation()),
-            openInterest: Math.floor(base.oi * variation()),
-            sentiment,
-            lastUpdate: new Date()
-        };
-    },
-
-    // Simulate unusual options flow
-    simulateUnusualFlow: () => {
-        // 30% chance of unusual activity
-        if (Math.random() > 0.3) return;
-        
-        const ticker = TRACKED_ASSETS[Math.floor(Math.random() * TRACKED_ASSETS.length)];
-        const type: 'CALL' | 'PUT' = Math.random() > 0.5 ? 'CALL' : 'PUT';
-        
-        const basePrices: Record<string, number> = {
-            'BTC': 45000,
-            'ETH': 2500,
-            'SOL': 120
-        };
-        const basePrice = basePrices[ticker] || 100;
-        
-        // Unusual = far OTM with high volume
-        const isOTM = Math.random() > 0.5;
-        const strike = isOTM 
-            ? basePrice * (type === 'CALL' ? 1.2 : 0.8) 
-            : basePrice * (type === 'CALL' ? 1.05 : 0.95);
-        
-        const flow: OptionsFlow = {
-            ticker,
-            type,
-            strike: Math.round(strike),
-            expiry: OptionsFlowService.getNextExpiry(),
-            premium: Math.floor(Math.random() * 5000000) + 1000000, // $1M-$6M
-            contracts: Math.floor(Math.random() * 5000) + 1000,
-            sentiment: type === 'CALL' ? 'BULLISH' : 'BEARISH',
-            unusualActivity: true,
-            timestamp: new Date()
-        };
-        
-        recentFlows.unshift(flow);
-        if (recentFlows.length > MAX_FLOWS) {
-            recentFlows.pop();
+    // Fetch real metrics from Deribit
+    fetchAllMetrics: async () => {
+        for (const ticker of TRACKED_ASSETS) {
+            try {
+                await OptionsFlowService.fetchDeribitMetrics(ticker);
+            } catch (err) {
+                console.error(`[OPTIONS] Error fetching ${ticker}:`, err);
+            }
         }
-        
-        console.log(`[OPTIONS] 🚨 Unusual ${type} flow: ${ticker} ${strike} ($${(flow.premium / 1000000).toFixed(1)}M)`);
     },
 
-    // Get next expiry date (typically Friday)
-    getNextExpiry: (): string => {
-        const now = new Date();
-        const daysUntilFriday = (5 - now.getDay() + 7) % 7 || 7;
-        const nextFriday = new Date(now.getTime() + daysUntilFriday * 24 * 60 * 60 * 1000);
-        return nextFriday.toISOString().split('T')[0];
+    // Fetch real options data from Deribit API
+    fetchDeribitMetrics: async (ticker: string) => {
+        try {
+            // Get index price
+            const indexRes = await fetch(`${DERIBIT_API}/get_index_price?index_name=${ticker.toLowerCase()}_usd`);
+            const indexData = await indexRes.json();
+            const indexPrice = indexData.result?.index_price || 0;
+
+            // Get book summary for volume/OI data (this is the key endpoint)
+            const summaryRes = await fetch(`${DERIBIT_API}/get_book_summary_by_currency?currency=${ticker}&kind=option`);
+            const summaryData = await summaryRes.json();
+            const summaries = summaryData.result || [];
+
+            if (summaries.length === 0) {
+                console.log(`[OPTIONS] No options data for ${ticker}`);
+                return;
+            }
+
+            // Aggregate metrics
+            let totalCallVolume = 0;
+            let totalPutVolume = 0;
+            let totalCallOI = 0;
+            let totalPutOI = 0;
+            let totalIV = 0;
+            let ivCount = 0;
+            const unusualFlows: OptionsFlow[] = [];
+
+            // Strike prices for max pain calculation
+            const strikePainMap: Map<number, number> = new Map();
+
+            for (const summary of summaries) {
+                const name = summary.instrument_name || '';
+                const isCall = name.includes('-C');
+                const isPut = name.includes('-P');
+                
+                const volume = summary.volume || 0;
+                const openInterest = summary.open_interest || 0;
+                const markIV = summary.mark_iv || 0;
+                
+                if (isCall) {
+                    totalCallVolume += volume;
+                    totalCallOI += openInterest;
+                } else if (isPut) {
+                    totalPutVolume += volume;
+                    totalPutOI += openInterest;
+                }
+
+                if (markIV > 0) {
+                    totalIV += markIV;
+                    ivCount++;
+                }
+
+                // Extract strike price for max pain
+                const parts = name.split('-');
+                if (parts.length >= 3) {
+                    const strike = parseFloat(parts[2]);
+                    if (!isNaN(strike)) {
+                        const currentPain = strikePainMap.get(strike) || 0;
+                        strikePainMap.set(strike, currentPain + openInterest);
+                    }
+                }
+
+                // Detect unusual activity (high volume relative to OI)
+                if (volume > 100 && openInterest > 0 && volume / openInterest > 0.5) {
+                    const strike = parseFloat(parts[2]) || 0;
+                    unusualFlows.push({
+                        ticker,
+                        type: isCall ? 'CALL' : 'PUT',
+                        strike,
+                        expiry: parts[1] || 'N/A',
+                        premium: (summary.mid_price || 0) * volume * indexPrice,
+                        contracts: Math.round(volume),
+                        sentiment: isCall ? 'BULLISH' : 'BEARISH',
+                        unusualActivity: true,
+                        timestamp: new Date()
+                    });
+                }
+            }
+
+            // Calculate max pain (strike with most OI)
+            let maxPainPrice = indexPrice;
+            let maxPain = 0;
+            strikePainMap.forEach((pain, strike) => {
+                if (pain > maxPain) {
+                    maxPain = pain;
+                    maxPainPrice = strike;
+                }
+            });
+
+            // Put/Call ratio
+            const putCallRatio = totalCallVolume > 0 ? totalPutVolume / totalCallVolume : 1;
+            
+            // Average IV
+            const avgIV = ivCount > 0 ? totalIV / ivCount : 50;
+
+            // Determine sentiment
+            let sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+            if (putCallRatio < 0.7) sentiment = 'BULLISH';
+            else if (putCallRatio > 1.0) sentiment = 'BEARISH';
+
+            const metrics: OptionsMetrics = {
+                ticker,
+                putCallRatio: Math.round(putCallRatio * 100) / 100,
+                totalCallVolume: Math.round(totalCallVolume),
+                totalPutVolume: Math.round(totalPutVolume),
+                maxPainPrice: Math.round(maxPainPrice),
+                impliedVolatility: Math.round(avgIV),
+                openInterest: Math.round(totalCallOI + totalPutOI),
+                sentiment,
+                lastUpdate: new Date()
+            };
+
+            optionsCache.set(ticker, metrics);
+
+            // Add unusual flows to recent flows
+            for (const flow of unusualFlows.slice(0, 5)) {
+                recentFlows.unshift(flow);
+            }
+            while (recentFlows.length > MAX_FLOWS) {
+                recentFlows.pop();
+            }
+
+            console.log(`[OPTIONS] ${ticker}: P/C=${putCallRatio.toFixed(2)}, IV=${avgIV.toFixed(0)}%, OI=${(totalCallOI + totalPutOI).toLocaleString()}`);
+
+        } catch (err) {
+            console.error(`[OPTIONS] Deribit API error for ${ticker}:`, err);
+        }
     },
 
     // Get metrics for a specific asset
@@ -176,23 +212,23 @@ export const OptionsFlowService = {
     },
 
     // Get overall market sentiment from options
-    getMarketSentiment: (): { sentiment: string; confidence: number; signals: string[] } => {
+    getMarketSentiment: (): { sentiment: string; confidence: number; put_call_ratio: number; signals: string[] } => {
         const metrics = Array.from(optionsCache.values());
         const signals: string[] = [];
-        
+
+        if (metrics.length === 0) {
+            return { sentiment: 'NEUTRAL', confidence: 50, put_call_ratio: 1, signals: ['Fetching data...'] };
+        }
+
         // Calculate aggregate put/call ratio
         const totalCalls = metrics.reduce((sum, m) => sum + m.totalCallVolume, 0);
         const totalPuts = metrics.reduce((sum, m) => sum + m.totalPutVolume, 0);
-        const aggregatePCR = totalPuts / totalCalls;
-        
-        // Count bullish vs bearish flows
-        const recentBullish = recentFlows.filter(f => f.sentiment === 'BULLISH' && f.unusualActivity).length;
-        const recentBearish = recentFlows.filter(f => f.sentiment === 'BEARISH' && f.unusualActivity).length;
-        
+        const aggregatePCR = totalCalls > 0 ? totalPuts / totalCalls : 1;
+
         // Determine sentiment
         let sentiment = 'NEUTRAL';
         let confidence = 50;
-        
+
         if (aggregatePCR < 0.7) {
             sentiment = 'BULLISH';
             confidence = 70;
@@ -201,26 +237,34 @@ export const OptionsFlowService = {
             sentiment = 'BEARISH';
             confidence = 65;
             signals.push(`High P/C ratio: ${aggregatePCR.toFixed(2)}`);
+        } else {
+            signals.push(`Neutral P/C ratio: ${aggregatePCR.toFixed(2)}`);
         }
-        
-        if (recentBullish > recentBearish * 2) {
-            signals.push(`Bullish flow dominance: ${recentBullish} vs ${recentBearish}`);
-            confidence += 10;
-        } else if (recentBearish > recentBullish * 2) {
-            signals.push(`Bearish flow dominance: ${recentBearish} vs ${recentBullish}`);
-            confidence += 10;
-        }
-        
-        // Check for high IV (uncertainty)
+
+        // Check IV levels
         const avgIV = metrics.reduce((sum, m) => sum + m.impliedVolatility, 0) / metrics.length;
         if (avgIV > 80) {
-            signals.push(`High implied volatility: ${avgIV.toFixed(0)}%`);
-            confidence -= 10; // Less certain in high IV environment
+            signals.push(`High IV: ${avgIV.toFixed(0)}% (uncertainty)`);
+            confidence -= 10;
+        } else if (avgIV < 40) {
+            signals.push(`Low IV: ${avgIV.toFixed(0)}% (complacency)`);
         }
-        
+
+        // Unusual flow analysis
+        const recentBullish = recentFlows.filter(f => f.sentiment === 'BULLISH').length;
+        const recentBearish = recentFlows.filter(f => f.sentiment === 'BEARISH').length;
+        if (recentBullish > recentBearish * 2) {
+            signals.push(`Bullish flow: ${recentBullish} vs ${recentBearish}`);
+            confidence += 5;
+        } else if (recentBearish > recentBullish * 2) {
+            signals.push(`Bearish flow: ${recentBearish} vs ${recentBullish}`);
+            confidence += 5;
+        }
+
         return {
             sentiment,
             confidence: Math.min(100, Math.max(0, confidence)),
+            put_call_ratio: Math.round(aggregatePCR * 100) / 100,
             signals
         };
     }

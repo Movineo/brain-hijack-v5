@@ -703,20 +703,23 @@
         try {
             const res = await fetch("/api/v1/sentiment/twitter/trending");
             const json = await res.json();
-            if (json.success) {
+            if (json.success && json.data.length > 0) {
                 const trending = document.getElementById("twitterTrending");
                 const mentions = document.getElementById("twitterMentions");
                 
                 trending.innerHTML = json.data.slice(0, 5).map(t => {
-                    const color = t.sentiment > 0 ? '#238636' : t.sentiment < 0 ? '#da3633' : '#8b949e';
+                    const score = t.sentiment?.score || 0;
+                    const color = score > 0 ? '#238636' : score < 0 ? '#da3633' : '#8b949e';
                     return `<div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid #21262d;">
-                        <span>${t.topic}</span>
-                        <span style="color:${color}">${t.sentiment > 0 ? '+' : ''}${t.sentiment.toFixed(2)}</span>
+                        <span>${t.asset}</span>
+                        <span style="color:${color}">${score > 0 ? '+' : ''}${score.toFixed(1)}</span>
                     </div>`;
                 }).join('');
                 
-                const total = json.data.reduce((s, t) => s + t.mentions, 0);
-                mentions.innerText = `${total} mentions in last hour`;
+                const total = json.data.reduce((s, t) => s + (t.sentiment?.tweets || 0), 0);
+                mentions.innerText = `${total} tweets analyzed`;
+            } else {
+                document.getElementById("twitterTrending").innerHTML = '<div style="color:#8b949e;">Scanning Twitter...</div>';
             }
         } catch(e) { console.log('Twitter unavailable'); }
     }
@@ -748,20 +751,30 @@
                 const sent = document.getElementById("optionsSentiment");
                 const pcr = document.getElementById("optionsPCR");
                 
-                sent.innerText = json.data.overall_sentiment.toUpperCase();
-                sent.style.color = json.data.overall_sentiment === 'bullish' ? '#238636' : 
-                                  json.data.overall_sentiment === 'bearish' ? '#da3633' : '#8b949e';
-                pcr.innerText = `P/C: ${json.data.put_call_ratio.toFixed(2)}`;
+                const sentiment = json.data.sentiment || json.data.overall_sentiment || 'NEUTRAL';
+                sent.innerText = sentiment.toUpperCase();
+                sent.style.color = sentiment.toLowerCase() === 'bullish' ? '#238636' : 
+                                  sentiment.toLowerCase() === 'bearish' ? '#da3633' : '#8b949e';
+                
+                // Get P/C ratio from metrics
+                const metricsRes = await fetch("/api/v1/sentiment/options");
+                const metricsJson = await metricsRes.json();
+                if (metricsJson.success && metricsJson.data.length > 0) {
+                    const avgPCR = metricsJson.data.reduce((s, m) => s + (m.putCallRatio || 0), 0) / metricsJson.data.length;
+                    pcr.innerText = `P/C: ${avgPCR.toFixed(2)}`;
+                }
             }
             
             // Unusual activity
             const unusualRes = await fetch("/api/v1/sentiment/options/unusual");
             const unusualJson = await unusualRes.json();
-            if (unusualJson.success) {
+            if (unusualJson.success && unusualJson.data.length > 0) {
                 const panel = document.getElementById("optionsUnusual");
                 panel.innerHTML = unusualJson.data.slice(0, 3).map(o => 
-                    `<div style="color:#f0883e;">⚡ ${o.ticker} ${o.type} $${o.strike} (${o.volume_ratio.toFixed(1)}x vol)</div>`
-                ).join('') || '<div style="color:#8b949e;">No unusual activity</div>';
+                    `<div style="color:#f0883e;">⚡ ${o.ticker} ${o.type} $${o.strike?.toLocaleString() || 'N/A'}</div>`
+                ).join('');
+            } else {
+                document.getElementById("optionsUnusual").innerHTML = '<div style="color:#8b949e;">Monitoring flows...</div>';
             }
         } catch(e) { console.log('Options unavailable'); }
     }
@@ -770,15 +783,18 @@
         try {
             const res = await fetch("/api/v1/sentiment/onchain/summary");
             const json = await res.json();
-            if (json.success) {
+            if (json.success && json.data.length > 0) {
                 const panel = document.getElementById("onchainSummary");
                 panel.innerHTML = json.data.slice(0, 4).map(c => {
-                    const health = c.health_score >= 70 ? '🟢' : c.health_score >= 40 ? '🟡' : '🔴';
+                    const score = c.healthScore || c.health_score || 50;
+                    const health = score >= 70 ? '🟢' : score >= 40 ? '🟡' : '🔴';
                     return `<div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid #21262d;">
                         <span>${c.ticker}</span>
-                        <span>${health} ${c.health_score}</span>
+                        <span>${health} ${score}</span>
                     </div>`;
-                }).join('') || '<div style="color:#8b949e;">No on-chain data</div>';
+                }).join('');
+            } else {
+                document.getElementById("onchainSummary").innerHTML = '<div style="color:#8b949e;">Fetching blockchain data...</div>';
             }
         } catch(e) { console.log('On-chain unavailable'); }
     }
