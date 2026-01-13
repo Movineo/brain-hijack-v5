@@ -16,6 +16,7 @@ import {
     createPriceAlert, getActiveAlerts, getAlertsByTicker, deletePriceAlert, getAlertStats, getTriggeredAlerts,
     startAutoTrader, stopAutoTrader, getAutoTraderStatus, updateAutoTraderConfig, analyzeAssetSignal, getLastSignal
 } from '../controllers/sentiment.controller';
+import { authHook, writeAuthHook, AuthService } from '../../shared/auth.service';
 
 export default async function sentimentRoutes(fastify: FastifyInstance) {
     fastify.get('/leaderboard', getLeaderboard);
@@ -30,12 +31,12 @@ export default async function sentimentRoutes(fastify: FastifyInstance) {
     fastify.get('/export/archive', exportArchiveCSV);
     fastify.get('/export/metrics', exportMetricsCSV);
     
-    // CONFIG & KILL SWITCH
+    // CONFIG & KILL SWITCH (Protected)
     fastify.get('/config', getConfig);
-    fastify.post('/config', updateConfig);
-    fastify.post('/killswitch/activate', activateKillSwitch);
-    fastify.post('/killswitch/deactivate', deactivateKillSwitch);
-    fastify.post('/config/reset', resetConfig);
+    fastify.post('/config', { preHandler: writeAuthHook }, updateConfig);
+    fastify.post('/killswitch/activate', { preHandler: writeAuthHook }, activateKillSwitch);
+    fastify.post('/killswitch/deactivate', { preHandler: writeAuthHook }, deactivateKillSwitch);
+    fastify.post('/config/reset', { preHandler: writeAuthHook }, resetConfig);
     
     // PUSH NOTIFICATIONS
     fastify.get('/push/key', getVapidPublicKey);
@@ -92,13 +93,38 @@ export default async function sentimentRoutes(fastify: FastifyInstance) {
     fastify.get('/alerts/:ticker', getAlertsByTicker);
     fastify.delete('/alerts/:id', deletePriceAlert);
     
-    // AUTOTRADER BOT
-    fastify.post('/autotrader/start', startAutoTrader);
-    fastify.post('/autotrader/stop', stopAutoTrader);
-    fastify.get('/autotrader/status', getAutoTraderStatus);
-    fastify.post('/autotrader/config', updateAutoTraderConfig);
+    // BRAIN HIJACK OPERATOR (Protected - requires write permission)
+    fastify.post('/autotrader/start', { preHandler: writeAuthHook }, startAutoTrader);
+    fastify.post('/autotrader/stop', { preHandler: writeAuthHook }, stopAutoTrader);
+    fastify.get('/autotrader/status', getAutoTraderStatus);  // Read-only, no auth needed
+    fastify.post('/autotrader/config', { preHandler: writeAuthHook }, updateAutoTraderConfig);
     fastify.get('/autotrader/signal/:ticker', analyzeAssetSignal);
     fastify.get('/autotrader/signal', getLastSignal);
+    
+    // AUTH MANAGEMENT (Admin only)
+    fastify.get('/auth/keys', { preHandler: authHook }, async (req, reply) => {
+        const permissions = (req as any).permissions;
+        if (!permissions?.includes('admin')) {
+            return reply.status(403).send({ success: false, error: 'Admin permission required' });
+        }
+        return { success: true, keys: AuthService.listKeys() };
+    });
+    
+    fastify.post('/auth/generate', { preHandler: authHook }, async (req, reply) => {
+        const permissions = (req as any).permissions;
+        if (!permissions?.includes('admin')) {
+            return reply.status(403).send({ success: false, error: 'Admin permission required' });
+        }
+        const { name, perms } = req.body as { name: string; perms?: string[] };
+        const newKey = AuthService.generateKey(name, perms || ['read']);
+        return { 
+            success: true, 
+            message: 'New API key generated. Save this - it will only be shown once.',
+            key: newKey,
+            name,
+            permissions: perms || ['read']
+        };
+    });
     
     fastify.get('/:ticker', getSentimentAnalysis);
 }
