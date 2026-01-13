@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PRAXIS | Command Center</title>
+    <title>🧠 Brain Hijack v5</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { box-sizing: border-box; }
@@ -472,6 +473,7 @@
     async function startBot() {
         const mode = document.getElementById('botMode').value;
         const modeNames = { CONSERVATIVE: 'Ice Cold', BALANCED: 'Calculated', AGGRESSIVE: 'Full Psycho' };
+        
         try {
             const res = await fetch('/api/v1/sentiment/autotrader/start', {
                 method: 'POST',
@@ -483,22 +485,26 @@
                 updateBotUI(json.data);
                 showNotification('🧠 Brain Hijack Active', `Operating in ${modeNames[mode]} mode`);
             } else {
-                showNotification('⚠️ Error', json.message);
+                showNotification('⚠️ Error', json.error || json.message || 'Failed to start');
             }
         } catch (e) {
             console.error('Failed to start Brain Hijack:', e);
+            showNotification('⚠️ Error', 'Network error');
         }
     }
     
     async function stopBot() {
         try {
             const res = await fetch('/api/v1/sentiment/autotrader/stop', {
-                method: 'POST'
+                method: 'POST',
+                headers: getAuthHeaders()
             });
             const json = await res.json();
             if (json.success) {
                 updateBotUI(json.data);
                 showNotification('🔌 Detached from Herd', `Total hijacks: ${json.data.tradesExecuted}`);
+            } else {
+                showNotification('⚠️ Error', json.error || 'Failed to stop');
             }
         } catch (e) {
             console.error('Failed to detach:', e);

@@ -16,7 +16,7 @@ import {
     createPriceAlert, getActiveAlerts, getAlertsByTicker, deletePriceAlert, getAlertStats, getTriggeredAlerts,
     startAutoTrader, stopAutoTrader, getAutoTraderStatus, updateAutoTraderConfig, analyzeAssetSignal, getLastSignal
 } from '../controllers/sentiment.controller';
-import { authHook, writeAuthHook, AuthService } from '../../shared/auth.service';
+import { authHook, AuthService } from '../../shared/auth.service';
 
 export default async function sentimentRoutes(fastify: FastifyInstance) {
     fastify.get('/leaderboard', getLeaderboard);
@@ -31,12 +31,12 @@ export default async function sentimentRoutes(fastify: FastifyInstance) {
     fastify.get('/export/archive', exportArchiveCSV);
     fastify.get('/export/metrics', exportMetricsCSV);
     
-    // CONFIG & KILL SWITCH (Protected)
+    // CONFIG & KILL SWITCH
     fastify.get('/config', getConfig);
-    fastify.post('/config', { preHandler: writeAuthHook }, updateConfig);
-    fastify.post('/killswitch/activate', { preHandler: writeAuthHook }, activateKillSwitch);
-    fastify.post('/killswitch/deactivate', { preHandler: writeAuthHook }, deactivateKillSwitch);
-    fastify.post('/config/reset', { preHandler: writeAuthHook }, resetConfig);
+    fastify.post('/config', updateConfig);
+    fastify.post('/killswitch/activate', activateKillSwitch);
+    fastify.post('/killswitch/deactivate', deactivateKillSwitch);
+    fastify.post('/config/reset', resetConfig);
     
     // PUSH NOTIFICATIONS
     fastify.get('/push/key', getVapidPublicKey);
@@ -93,15 +93,15 @@ export default async function sentimentRoutes(fastify: FastifyInstance) {
     fastify.get('/alerts/:ticker', getAlertsByTicker);
     fastify.delete('/alerts/:id', deletePriceAlert);
     
-    // BRAIN HIJACK OPERATOR (Protected - requires write permission)
-    fastify.post('/autotrader/start', { preHandler: writeAuthHook }, startAutoTrader);
-    fastify.post('/autotrader/stop', { preHandler: writeAuthHook }, stopAutoTrader);
-    fastify.get('/autotrader/status', getAutoTraderStatus);  // Read-only, no auth needed
-    fastify.post('/autotrader/config', { preHandler: writeAuthHook }, updateAutoTraderConfig);
+    // BRAIN HIJACK OPERATOR (Paper trading - no auth needed for personal use)
+    fastify.post('/autotrader/start', startAutoTrader);
+    fastify.post('/autotrader/stop', stopAutoTrader);
+    fastify.get('/autotrader/status', getAutoTraderStatus);
+    fastify.post('/autotrader/config', updateAutoTraderConfig);
     fastify.get('/autotrader/signal/:ticker', analyzeAssetSignal);
     fastify.get('/autotrader/signal', getLastSignal);
     
-    // AUTH MANAGEMENT (Admin only)
+    // AUTH MANAGEMENT (For future external API access)
     fastify.get('/auth/keys', { preHandler: authHook }, async (req, reply) => {
         const permissions = (req as any).permissions;
         if (!permissions?.includes('admin')) {
