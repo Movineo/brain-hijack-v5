@@ -13,6 +13,7 @@ import { OnChainService } from '../../modules/analytics/onchain.service';
 import { FearGreedService } from '../../modules/sentiment/fear-greed.service';
 import { OptionsFlowService } from '../../modules/analytics/options-flow.service';
 import { AlertsService } from '../../modules/notifications/alerts.service';
+import { AutoTraderService } from '../../modules/execution/autotrader.service';
 
 // ORIGINAL: Single Coin Analysis (Keep for specific queries)
 export const getSentimentAnalysis = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -730,3 +731,75 @@ export const getTriggeredAlerts = async (request: FastifyRequest, reply: Fastify
         return reply.status(500).send({ error: 'Failed to get triggered alerts.' });
     }
 }
+
+// ============ AUTOTRADER BOT ============
+
+// 47. START AUTOTRADER BOT
+export const startAutoTrader = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { mode = 'BALANCED' } = request.body as { mode?: 'AGGRESSIVE' | 'BALANCED' | 'CONSERVATIVE' };
+    try {
+        const result = AutoTraderService.start(mode);
+        return reply.send({ success: result.success, message: result.message, data: AutoTraderService.getStats() });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to start AutoTrader.' });
+    }
+};
+
+// 48. STOP AUTOTRADER BOT
+export const stopAutoTrader = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const result = AutoTraderService.stop();
+        return reply.send({ success: result.success, message: result.message, data: AutoTraderService.getStats() });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to stop AutoTrader.' });
+    }
+};
+
+// 49. GET AUTOTRADER STATUS
+export const getAutoTraderStatus = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const stats = AutoTraderService.getStats();
+        const config = AutoTraderService.getConfig();
+        return reply.send({ success: true, data: { stats, config } });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to get AutoTrader status.' });
+    }
+};
+
+// 50. UPDATE AUTOTRADER CONFIG
+export const updateAutoTraderConfig = async (request: FastifyRequest, reply: FastifyReply) => {
+    const updates = request.body as Record<string, any>;
+    try {
+        const config = AutoTraderService.updateConfig(updates);
+        return reply.send({ success: true, data: config });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to update AutoTrader config.' });
+    }
+};
+
+// 51. ANALYZE SINGLE ASSET (Manual signal check)
+export const analyzeAssetSignal = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { ticker } = request.params as { ticker: string };
+    try {
+        const signal = await AutoTraderService.analyzeAsset(ticker);
+        return reply.send({ success: true, data: signal });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to analyze asset.' });
+    }
+};
+
+// 52. GET LAST SIGNAL
+export const getLastSignal = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const signal = AutoTraderService.getRecentSignals();
+        return reply.send({ success: true, data: signal });
+    } catch (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Failed to get last signal.' });
+    }
+};

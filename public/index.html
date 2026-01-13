@@ -226,6 +226,70 @@
         </div>
     </div>
 
+    <!-- AUTOTRADER BOT PANEL -->
+    <div class="panel" style="grid-column: 1 / -1; background: linear-gradient(135deg, #161b22 0%, #1a1f2e 100%); border: 1px solid #30363d;">
+        <div class="panel-title">🤖 AUTOTRADER BOT</div>
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; padding: 10px;">
+            <!-- Bot Controls -->
+            <div style="flex: 1; min-width: 200px;">
+                <div style="margin-bottom: 15px;">
+                    <label style="color: #8b949e; display: block; margin-bottom: 5px;">Mode:</label>
+                    <select id="botMode" style="width: 100%; padding: 8px; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px;">
+                        <option value="CONSERVATIVE">🛡️ Conservative (Safe)</option>
+                        <option value="BALANCED" selected>⚖️ Balanced (Default)</option>
+                        <option value="AGGRESSIVE">🔥 Aggressive (Risky)</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button id="btnStartBot" onclick="startBot()" style="flex: 1; padding: 10px; background: #238636; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: bold;">
+                        ▶️ START
+                    </button>
+                    <button id="btnStopBot" onclick="stopBot()" style="flex: 1; padding: 10px; background: #da3633; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: bold;" disabled>
+                        ⏹️ STOP
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Bot Stats -->
+            <div style="flex: 2; min-width: 300px;">
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px;">
+                        <div style="color: #8b949e; font-size: 0.8em;">STATUS</div>
+                        <div id="botStatus" style="font-weight: bold; color: #da3633;">STOPPED</div>
+                    </div>
+                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px;">
+                        <div style="color: #8b949e; font-size: 0.8em;">MODE</div>
+                        <div id="botModeDisplay" style="font-weight: bold;">-</div>
+                    </div>
+                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px;">
+                        <div style="color: #8b949e; font-size: 0.8em;">SIGNALS</div>
+                        <div id="botSignals" style="font-weight: bold;">0</div>
+                    </div>
+                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px;">
+                        <div style="color: #8b949e; font-size: 0.8em;">AUTO-TRADES</div>
+                        <div id="botTrades" style="font-weight: bold; color: #58a6ff;">0</div>
+                    </div>
+                </div>
+                <!-- Last Signal -->
+                <div id="lastSignalBox" style="margin-top: 10px; padding: 10px; background: #21262d; border-radius: 6px; display: none;">
+                    <div style="color: #8b949e; font-size: 0.8em; margin-bottom: 5px;">LAST SIGNAL:</div>
+                    <div id="lastSignalContent" style="font-size: 0.9em;"></div>
+                </div>
+            </div>
+            
+            <!-- Config Summary -->
+            <div style="flex: 1; min-width: 150px; padding: 10px; background: #21262d; border-radius: 6px;">
+                <div style="color: #8b949e; font-size: 0.8em; margin-bottom: 8px;">REQUIREMENTS:</div>
+                <div id="botConfig" style="font-size: 0.85em; line-height: 1.6;">
+                    <div>ML Conf: ≥<span id="cfgML">55</span>%</div>
+                    <div>Alignment: ≥<span id="cfgAlign">60</span>%</div>
+                    <div>Max Pos: <span id="cfgMaxPos">3</span></div>
+                    <div>Cooldown: <span id="cfgCooldown">30</span>m</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- SNIPER PANEL -->
     <div class="panel" style="grid-column: 1 / -1;">
         <div class="panel-title">🔫 SNIPER MODE [PAPER TRADING]</div>
@@ -399,6 +463,102 @@
         document.getElementById("statWinRate").innerText = stats.winRate;
         document.getElementById("statTrades").innerText = stats.totalTrades;
         document.getElementById("statOpen").innerText = stats.openPositions;
+    }
+
+    // ============ AUTOTRADER BOT FUNCTIONS ============
+    
+    async function startBot() {
+        const mode = document.getElementById('botMode').value;
+        try {
+            const res = await fetch('/api/v1/sentiment/autotrader/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode })
+            });
+            const json = await res.json();
+            if (json.success) {
+                updateBotUI(json.data);
+                showNotification('🤖 AutoTrader Started', `Running in ${mode} mode`);
+            } else {
+                showNotification('⚠️ Error', json.message);
+            }
+        } catch (e) {
+            console.error('Failed to start bot:', e);
+        }
+    }
+    
+    async function stopBot() {
+        try {
+            const res = await fetch('/api/v1/sentiment/autotrader/stop', {
+                method: 'POST'
+            });
+            const json = await res.json();
+            if (json.success) {
+                updateBotUI(json.data);
+                showNotification('🛑 AutoTrader Stopped', `Total trades: ${json.data.tradesExecuted}`);
+            }
+        } catch (e) {
+            console.error('Failed to stop bot:', e);
+        }
+    }
+    
+    async function updateBotStatus() {
+        try {
+            const res = await fetch('/api/v1/sentiment/autotrader/status');
+            const json = await res.json();
+            if (json.success) {
+                updateBotUI(json.data.stats);
+                updateBotConfig(json.data.config);
+            }
+        } catch (e) {
+            console.log('AutoTrader status unavailable');
+        }
+    }
+    
+    function updateBotUI(stats) {
+        const statusEl = document.getElementById('botStatus');
+        const startBtn = document.getElementById('btnStartBot');
+        const stopBtn = document.getElementById('btnStopBot');
+        
+        if (stats.isRunning) {
+            statusEl.innerText = 'RUNNING';
+            statusEl.style.color = '#238636';
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+        } else {
+            statusEl.innerText = 'STOPPED';
+            statusEl.style.color = '#da3633';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+        
+        document.getElementById('botModeDisplay').innerText = stats.mode || '-';
+        document.getElementById('botSignals').innerText = stats.signalsGenerated || 0;
+        document.getElementById('botTrades').innerText = stats.tradesExecuted || 0;
+        
+        // Update last signal display
+        if (stats.lastSignal) {
+            const sig = stats.lastSignal;
+            document.getElementById('lastSignalBox').style.display = 'block';
+            const alignColor = sig.alignmentScore >= 70 ? '#238636' : sig.alignmentScore >= 50 ? '#d29922' : '#da3633';
+            document.getElementById('lastSignalContent').innerHTML = `
+                <span style="color: ${sig.direction === 'LONG' ? '#238636' : '#da3633'}; font-weight: bold;">${sig.direction}</span>
+                ${sig.ticker} @ $${sig.price?.toFixed(2) || '0.00'}<br>
+                <span style="color: #8b949e;">Conf: ${sig.confidence}% | Align: <span style="color: ${alignColor}">${sig.alignmentScore}%</span></span>
+            `;
+        }
+    }
+    
+    function updateBotConfig(config) {
+        document.getElementById('cfgML').innerText = config.minMLConfidence || 55;
+        document.getElementById('cfgAlign').innerText = config.minAlignmentScore || 60;
+        document.getElementById('cfgMaxPos').innerText = config.maxOpenPositions || 3;
+        document.getElementById('cfgCooldown').innerText = config.cooldownMinutes || 30;
+    }
+    
+    function showNotification(title, message) {
+        // Simple console notification (can be enhanced with toast UI)
+        console.log(`[NOTIFY] ${title}: ${message}`);
     }
 
     function updateConnectionStatus(connected) {
@@ -899,6 +1059,7 @@
         updateOptionsFlow();
         updateOnChain();
         checkAlerts();
+        updateBotStatus();
     }, 10000);
     
     // Initial load of new panels
@@ -909,6 +1070,7 @@
         updateOptionsFlow();
         updateOnChain();
         renderAlerts();
+        updateBotStatus();
     }, 1000);
 </script>
 </body>

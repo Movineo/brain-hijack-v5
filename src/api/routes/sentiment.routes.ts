@@ -13,7 +13,8 @@ import {
     getOnChainMetrics, getOnChainAssetMetrics, getNetworkSummary,
     getFearGreedIndex, getFearGreedHistory, getMarketMood,
     getOptionsMetrics, getOptionsAssetMetrics, getUnusualOptionsFlows, getOptionsMarketSentiment,
-    createPriceAlert, getActiveAlerts, getAlertsByTicker, deletePriceAlert, getAlertStats, getTriggeredAlerts
+    createPriceAlert, getActiveAlerts, getAlertsByTicker, deletePriceAlert, getAlertStats, getTriggeredAlerts,
+    startAutoTrader, stopAutoTrader, getAutoTraderStatus, updateAutoTraderConfig, analyzeAssetSignal, getLastSignal
 } from '../controllers/sentiment.controller';
 
 export default async function sentimentRoutes(fastify: FastifyInstance) {
@@ -90,6 +91,14 @@ export default async function sentimentRoutes(fastify: FastifyInstance) {
     fastify.get('/alerts/history', getTriggeredAlerts);
     fastify.get('/alerts/:ticker', getAlertsByTicker);
     fastify.delete('/alerts/:id', deletePriceAlert);
+    
+    // AUTOTRADER BOT
+    fastify.post('/autotrader/start', startAutoTrader);
+    fastify.post('/autotrader/stop', stopAutoTrader);
+    fastify.get('/autotrader/status', getAutoTraderStatus);
+    fastify.post('/autotrader/config', updateAutoTraderConfig);
+    fastify.get('/autotrader/signal/:ticker', analyzeAssetSignal);
+    fastify.get('/autotrader/signal', getLastSignal);
     
     fastify.get('/:ticker', getSentimentAnalysis);
 }

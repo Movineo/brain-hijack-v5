@@ -199,3 +199,21 @@ CREATE TABLE IF NOT EXISTS api_rate_limits (
 );
 
 CREATE INDEX IF NOT EXISTS idx_rate_limits_key_window ON api_rate_limits(api_key, window_start);
+
+-- ============================================
+-- Phase 12: AutoTrader Bot Signals
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS autotrader_signals (
+    id SERIAL PRIMARY KEY,
+    ticker VARCHAR(20) NOT NULL,
+    direction VARCHAR(10) NOT NULL, -- 'LONG' or 'SHORT'
+    confidence INTEGER NOT NULL, -- 0-100
+    alignment_score INTEGER NOT NULL, -- 0-100
+    signals JSONB, -- Array of signal sources
+    price DECIMAL(20, 8),
+    executed_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_autotrader_ticker ON autotrader_signals(ticker);
+CREATE INDEX IF NOT EXISTS idx_autotrader_executed ON autotrader_signals(executed_at DESC);
