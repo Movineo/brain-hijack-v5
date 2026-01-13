@@ -10,6 +10,7 @@ import { TwitterService } from '../sentiment/twitter.service';
 import { OptionsFlowService } from '../analytics/options-flow.service';
 import { OnChainService } from '../analytics/onchain.service';
 import { ConfigService } from '../../shared/config.service';
+import { SentimentService } from '../sentiment/sentiment.service';
 
 // Bot Configuration
 interface BotConfig {
@@ -78,25 +79,25 @@ const tradeCooldowns: Map<string, number> = new Map();
 let startTime: number = 0;
 let scanInterval: NodeJS.Timeout | null = null;
 
-// Mode presets
+// Mode presets - adjusted for real market conditions
 const MODE_PRESETS: Record<string, Partial<BotConfig>> = {
     AGGRESSIVE: {
-        minMLConfidence: 45,
-        minAlignmentScore: 40,
+        minMLConfidence: 35,      // Lowered - take more trades
+        minAlignmentScore: 35,
         requireSentimentAlignment: false,
-        cooldownMinutes: 15
+        cooldownMinutes: 10
     },
     BALANCED: {
-        minMLConfidence: 55,
-        minAlignmentScore: 60,
+        minMLConfidence: 45,      // Lowered from 55
+        minAlignmentScore: 50,    // Lowered from 60
         requireSentimentAlignment: true,
-        cooldownMinutes: 30
+        cooldownMinutes: 20
     },
     CONSERVATIVE: {
-        minMLConfidence: 70,
-        minAlignmentScore: 75,
+        minMLConfidence: 55,      // Lowered from 70
+        minAlignmentScore: 60,    // Lowered from 75
         requireSentimentAlignment: true,
-        cooldownMinutes: 60
+        cooldownMinutes: 45
     }
 };
 
@@ -157,17 +158,29 @@ export const AutoTraderService = {
         }
 
         try {
-            // Get ML predictions
-            const mlPredictions = await MLPredictorService.getHighConfidencePredictions(botConfig.minMLConfidence);
+            // Get ML predictions with lower threshold to see what's available
+            const allPredictions = await MLPredictorService.getHighConfidencePredictions(30);
+            const mlPredictions = allPredictions.filter(p => p.confidence >= botConfig.minMLConfidence);
+            
+            console.log(`[AUTOTRADER] Scan: ${allPredictions.length} predictions found, ${mlPredictions.length} meet ${botConfig.minMLConfidence}% threshold`);
+            
+            // Log top predictions for debugging
+            if (allPredictions.length > 0 && mlPredictions.length === 0) {
+                const top = allPredictions.slice(0, 3).map(p => `${p.ticker}:${p.confidence}%`).join(', ');
+                console.log(`[AUTOTRADER] Top predictions (below threshold): ${top}`);
+            }
             
             for (const prediction of mlPredictions) {
                 // Skip if on cooldown
                 if (AutoTraderService.isOnCooldown(prediction.ticker)) {
+                    console.log(`[AUTOTRADER] ${prediction.ticker} on cooldown, skipping`);
                     continue;
                 }
 
                 // Generate full trade signal with alignment check
                 const signal = await AutoTraderService.generateSignal(prediction);
+                
+                console.log(`[AUTOTRADER] ${prediction.ticker} signal: ML=${prediction.confidence}%, Align=${signal?.alignmentScore || 0}%, Required=${botConfig.minAlignmentScore}%`);
                 
                 if (signal && signal.alignmentScore >= botConfig.minAlignmentScore) {
                     botStats.signalsGenerated++;
@@ -181,6 +194,12 @@ export const AutoTraderService = {
                     }
                 }
             }
+            
+            // FALLBACK: If no ML predictions meet threshold, scan using hijack force
+            if (mlPredictions.length === 0) {
+                console.log('[AUTOTRADER] No ML signals, scanning using Hijack Force fallback...');
+                await AutoTraderService.scanWithHijackForce();
+            }
 
             // Update uptime
             botStats.uptime = Math.floor((Date.now() - startTime) / 1000);
@@ -188,6 +207,143 @@ export const AutoTraderService = {
         } catch (err) {
             console.error('[AUTOTRADER] Scan error:', err);
         }
+    },
+    
+    // Fallback: Scan using hijack force from leaderboard when ML data is sparse
+    scanWithHijackForce: async () => {
+        try {
+            const leaderboard = await SentimentService.getMarketLeaderboard();
+            
+            // Find assets with notable hijack force
+            const candidates = leaderboard
+                .filter((a: any) => a.hijackForce > 0.001) // Any detectable force
+                .slice(0, 5); // Top 5
+                
+            console.log(`[AUTOTRADER] Hijack Force candidates: ${candidates.length}`);
+            
+            for (const asset of candidates) {
+                if (AutoTraderService.isOnCooldown(asset.ticker)) continue;
+                
+                // Generate signal using force + sentiment alignment
+                const signal = await AutoTraderService.generateForceSignal(asset);
+                
+                if (signal && signal.alignmentScore >= botConfig.minAlignmentScore) {
+                    botStats.signalsGenerated++;
+                    botStats.lastSignal = signal;
+                    
+                    const canTrade = await AutoTraderService.canExecuteTrade(signal);
+                    if (canTrade) {
+                        await AutoTraderService.executeTrade(signal);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('[AUTOTRADER] Hijack force scan error:', err);
+        }
+    },
+    
+    // Generate signal from hijack force data (fallback mode)
+    generateForceSignal: async (asset: any): Promise<TradeSignal | null> => {
+        const ticker = asset.ticker;
+        const baseTicker = ticker.replace('USD', '').replace('-USD', '');
+        
+        const signals: SignalSource[] = [];
+        let totalWeight = 0;
+        let bullishWeight = 0;
+        let bearishWeight = 0;
+        
+        // 1. Hijack Force (weight: 35%) - the main signal in fallback mode
+        const forceWeight = 35;
+        const forceSignal: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 
+            asset.hijackForce > 0.005 ? 'BULLISH' : 
+            asset.hijackForce > 0.002 ? 'BULLISH' : 'NEUTRAL';
+        
+        // Convert force to confidence (0.001 = 40%, 0.005 = 60%, 0.01 = 80%)
+        const forceConfidence = Math.min(80, 40 + (asset.hijackForce * 4000));
+        
+        signals.push({
+            source: 'Hijack Force',
+            signal: forceSignal,
+            value: `Force: ${asset.hijackForce.toFixed(5)}`,
+            weight: forceWeight
+        });
+        totalWeight += forceWeight;
+        if (forceSignal === 'BULLISH') bullishWeight += forceWeight;
+        
+        // 2. Fear & Greed (weight: 20%)
+        try {
+            const fg = await FearGreedService.getIndex();
+            const fgWeight = 20;
+            let fgSignal: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+            if (fg.value <= 30) fgSignal = 'BULLISH';
+            else if (fg.value >= 70) fgSignal = 'BEARISH';
+            
+            signals.push({
+                source: 'Fear & Greed',
+                signal: fgSignal,
+                value: `${fg.value} (${fg.label})`,
+                weight: fgWeight
+            });
+            totalWeight += fgWeight;
+            if (fgSignal === 'BULLISH') bullishWeight += fgWeight;
+            if (fgSignal === 'BEARISH') bearishWeight += fgWeight;
+        } catch (e) { /* Skip */ }
+        
+        // 3. Social Sentiment (weight: 25%)
+        try {
+            const social = TwitterService.getSentiment(baseTicker);
+            const socialWeight = 25;
+            let socialSignal: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+            if (social.score >= 1) socialSignal = 'BULLISH';
+            else if (social.score <= -1) socialSignal = 'BEARISH';
+            
+            signals.push({
+                source: 'Social Sentiment',
+                signal: socialSignal,
+                value: `Score: ${social.score.toFixed(1)}`,
+                weight: socialWeight
+            });
+            totalWeight += socialWeight;
+            if (socialSignal === 'BULLISH') bullishWeight += socialWeight;
+            if (socialSignal === 'BEARISH') bearishWeight += socialWeight;
+        } catch (e) { /* Skip */ }
+        
+        // 4. On-Chain (weight: 20%)
+        try {
+            const onchain = OnChainService.getHealthScore(baseTicker);
+            const ocWeight = 20;
+            let ocSignal: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+            if (onchain.score >= 65) ocSignal = 'BULLISH';
+            else if (onchain.score <= 45) ocSignal = 'BEARISH';
+            
+            signals.push({
+                source: 'On-Chain',
+                signal: ocSignal,
+                value: `Health: ${onchain.score}/100`,
+                weight: ocWeight
+            });
+            totalWeight += ocWeight;
+            if (ocSignal === 'BULLISH') bullishWeight += ocWeight;
+            if (ocSignal === 'BEARISH') bearishWeight += ocWeight;
+        } catch (e) { /* Skip */ }
+        
+        // Calculate alignment
+        const direction = bullishWeight > bearishWeight ? 'LONG' : 'SHORT';
+        const dominantWeight = Math.max(bullishWeight, bearishWeight);
+        const alignmentScore = totalWeight > 0 ? Math.round((dominantWeight / totalWeight) * 100) : 0;
+        
+        // Need at least 3 signals
+        if (signals.length < 3) return null;
+        
+        return {
+            ticker,
+            direction,
+            confidence: Math.round(forceConfidence),
+            alignmentScore,
+            signals,
+            price: asset.latestPrice,
+            timestamp: new Date()
+        };
     },
 
     // Generate a trade signal with multi-source alignment
