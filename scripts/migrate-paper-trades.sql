@@ -217,3 +217,101 @@ CREATE TABLE IF NOT EXISTS autotrader_signals (
 
 CREATE INDEX IF NOT EXISTS idx_autotrader_ticker ON autotrader_signals(ticker);
 CREATE INDEX IF NOT EXISTS idx_autotrader_executed ON autotrader_signals(executed_at DESC);
+
+-- ============================================
+-- Phase 13: Brain Hijack Detection System
+-- "Trade the herd's psychology, not the asset"
+-- ============================================
+
+-- Brain state snapshots for pattern learning
+CREATE TABLE IF NOT EXISTS brain_states (
+    id SERIAL PRIMARY KEY,
+    ticker VARCHAR(20) NOT NULL,
+    brain_state VARCHAR(20) NOT NULL, -- FOMO, EUPHORIA, PANIC, CAPITULATION, etc.
+    hijack_strength INTEGER NOT NULL, -- 0-100
+    trigger_type VARCHAR(20), -- FOMO, FUD, MOMENTUM, CONTRARIAN, SMART_MONEY
+    is_contrarian BOOLEAN DEFAULT FALSE,
+    herd_direction VARCHAR(10), -- LONG or SHORT
+    optimal_direction VARCHAR(10), -- What we should do (opposite if contrarian)
+    
+    -- Sentiment components at time of detection
+    fear_greed_index INTEGER,
+    social_sentiment DECIMAL(5, 4), -- -1 to +1
+    news_sentiment DECIMAL(5, 4),
+    whale_activity DECIMAL(10, 2),
+    options_pcr DECIMAL(5, 4), -- Put/Call ratio
+    funding_rate DECIMAL(10, 6),
+    
+    -- Velocity metrics (rate of change)
+    sentiment_velocity DECIMAL(10, 4), -- Change per hour
+    price_velocity DECIMAL(10, 4),
+    volume_spike DECIMAL(10, 2), -- Multiple of average
+    
+    recorded_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_brain_states_ticker ON brain_states(ticker);
+CREATE INDEX IF NOT EXISTS idx_brain_states_state ON brain_states(brain_state);
+CREATE INDEX IF NOT EXISTS idx_brain_states_strength ON brain_states(hijack_strength DESC);
+CREATE INDEX IF NOT EXISTS idx_brain_states_recorded ON brain_states(recorded_at DESC);
+
+-- Track hijack outcomes for ML training
+CREATE TABLE IF NOT EXISTS hijack_outcomes (
+    id SERIAL PRIMARY KEY,
+    brain_state_id INTEGER REFERENCES brain_states(id),
+    ticker VARCHAR(20) NOT NULL,
+    entry_price DECIMAL(20, 8),
+    exit_price DECIMAL(20, 8),
+    direction VARCHAR(10), -- LONG or SHORT
+    profit_pct DECIMAL(10, 4),
+    was_successful BOOLEAN, -- Did contrarian play work?
+    hold_duration_minutes INTEGER,
+    max_drawdown_pct DECIMAL(10, 4),
+    max_profit_pct DECIMAL(10, 4),
+    created_at TIMESTAMP DEFAULT NOW(),
+    closed_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_hijack_outcomes_ticker ON hijack_outcomes(ticker);
+CREATE INDEX IF NOT EXISTS idx_hijack_outcomes_success ON hijack_outcomes(was_successful);
+CREATE INDEX IF NOT EXISTS idx_hijack_outcomes_state ON hijack_outcomes(brain_state_id);
+
+-- Herd behavior patterns (for pattern matching)
+CREATE TABLE IF NOT EXISTS herd_patterns (
+    id SERIAL PRIMARY KEY,
+    pattern_name VARCHAR(50) NOT NULL, -- 'FOMO_TOP', 'CAPITULATION_BOTTOM', 'BULL_TRAP', etc.
+    description TEXT,
+    
+    -- Pattern signature (what to look for)
+    fear_greed_min INTEGER,
+    fear_greed_max INTEGER,
+    sentiment_velocity_min DECIMAL(10, 4),
+    sentiment_velocity_max DECIMAL(10, 4),
+    volume_spike_min DECIMAL(10, 2),
+    social_sentiment_min DECIMAL(5, 4),
+    social_sentiment_max DECIMAL(5, 4),
+    
+    -- Action when pattern detected
+    recommended_action VARCHAR(10), -- LONG, SHORT, or WAIT
+    confidence_boost INTEGER DEFAULT 0, -- Add to base confidence
+    
+    -- Pattern stats
+    times_detected INTEGER DEFAULT 0,
+    times_profitable INTEGER DEFAULT 0,
+    avg_profit_pct DECIMAL(10, 4),
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Insert known herd patterns
+INSERT INTO herd_patterns (pattern_name, description, fear_greed_min, fear_greed_max, sentiment_velocity_min, social_sentiment_min, social_sentiment_max, recommended_action, confidence_boost) VALUES
+('FOMO_TOP', 'Extreme greed + rapid sentiment rise = likely top', 80, 100, 0.5, 0.7, 1.0, 'SHORT', 15),
+('CAPITULATION_BOTTOM', 'Extreme fear + sentiment capitulation = likely bottom', 0, 20, -0.5, -1.0, -0.5, 'LONG', 20),
+('BULL_TRAP', 'Quick recovery from fear into greed = trap', 45, 65, 0.8, 0.3, 0.6, 'SHORT', 10),
+('BEAR_TRAP', 'Quick drop from greed into fear = trap', 35, 55, -0.8, -0.6, -0.3, 'LONG', 10),
+('EUPHORIA_PEAK', 'Maximum greed sustained = distribution phase', 85, 100, -0.1, 0.8, 1.0, 'SHORT', 25),
+('DEPRESSION_BOTTOM', 'Maximum fear sustained = accumulation phase', 0, 15, 0.1, -1.0, -0.7, 'LONG', 25),
+('FOMO_ACCELERATION', 'Sentiment accelerating upward rapidly', 60, 80, 1.0, 0.5, 0.8, 'SHORT', 5),
+('PANIC_ACCELERATION', 'Sentiment accelerating downward rapidly', 20, 40, -1.0, -0.8, -0.5, 'LONG', 5)
+ON CONFLICT DO NOTHING;
