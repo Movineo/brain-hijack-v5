@@ -1,6 +1,12 @@
-// AUTOTRADER BOT SERVICE
-// Automated paper trading based on ML signals + multi-source sentiment alignment
-// Combines: ML Predictions + Fear/Greed + Social Sentiment + Options Flow + On-Chain
+// PSYCHOPATH OPERATOR SERVICE
+// "Operate like a psychopathic scientist. Nothing attached." - Giovanni
+//
+// We don't trade OUR emotions. We trade THEIR emotions.
+// We detect when the HERD'S brain is being hijacked.
+// We execute with cold, calculated precision.
+//
+// This is not about what WE feel. It's about what THEY feel.
+// "The only thing that matters is what hijacks your customers' brains."
 
 import { query } from '../../shared/db';
 import { TelegramService } from '../notifications/telegram.service';
@@ -11,6 +17,7 @@ import { OptionsFlowService } from '../analytics/options-flow.service';
 import { OnChainService } from '../analytics/onchain.service';
 import { ConfigService } from '../../shared/config.service';
 import { SentimentService } from '../sentiment/sentiment.service';
+import { BrainScannerService, HijackSignal } from '../analytics/brain-scanner.service';
 
 // Bot Configuration
 interface BotConfig {
@@ -79,25 +86,31 @@ const tradeCooldowns: Map<string, number> = new Map();
 let startTime: number = 0;
 let scanInterval: NodeJS.Timeout | null = null;
 
-// Mode presets - adjusted for real market conditions
+// Mode presets - "Know your customers. Live inside their worldview."
 const MODE_PRESETS: Record<string, Partial<BotConfig>> = {
     AGGRESSIVE: {
-        minMLConfidence: 35,      // Lowered - take more trades
-        minAlignmentScore: 35,
+        // "Seek first the kingdom... and everything else will be added"
+        // Maximum brain hijack detection, minimum filters
+        minMLConfidence: 30,
+        minAlignmentScore: 30,
         requireSentimentAlignment: false,
-        cooldownMinutes: 10
+        cooldownMinutes: 5
     },
     BALANCED: {
-        minMLConfidence: 45,      // Lowered from 55
-        minAlignmentScore: 50,    // Lowered from 60
+        // "Crawl inside their head like a fucking creep"
+        // Balanced detection with confirmation
+        minMLConfidence: 40,
+        minAlignmentScore: 45,
         requireSentimentAlignment: true,
-        cooldownMinutes: 20
+        cooldownMinutes: 15
     },
     CONSERVATIVE: {
-        minMLConfidence: 55,      // Lowered from 70
-        minAlignmentScore: 60,    // Lowered from 75
+        // "A scientist experimenting on a subject doesn't give a fuck about how he feels"
+        // Only strong hijacks with full confirmation
+        minMLConfidence: 50,
+        minAlignmentScore: 55,
         requireSentimentAlignment: true,
-        cooldownMinutes: 45
+        cooldownMinutes: 30
     }
 };
 
@@ -219,30 +232,63 @@ export const AutoTraderService = {
                 .filter((a: any) => a.hijackForce > 0.001) // Any detectable force
                 .slice(0, 5); // Top 5
                 
-            console.log(`[AUTOTRADER] Hijack Force candidates: ${candidates.length}`);
+            console.log(`[OPERATOR] 🧠 Scanning ${candidates.length} hijack candidates...`);
             
             for (const asset of candidates) {
                 if (AutoTraderService.isOnCooldown(asset.ticker)) continue;
                 
-                // Generate signal using force + sentiment alignment
-                const signal = await AutoTraderService.generateForceSignal(asset);
+                // NEW: Use Brain Scanner for deep psychological analysis
+                const hijackSignal = await BrainScannerService.scanHerdBrain(
+                    asset.ticker, 
+                    asset.hijackForce
+                );
                 
-                if (signal && signal.alignmentScore >= botConfig.minAlignmentScore) {
+                console.log(`[OPERATOR] ${asset.ticker}: ${hijackSignal.brainState} | Strength: ${hijackSignal.hijackStrength}% | ${hijackSignal.optimalDirection}`);
+                
+                // Only execute on strong hijacks
+                if (BrainScannerService.isStrongHijack(hijackSignal)) {
+                    const signal = AutoTraderService.convertHijackToTradeSignal(hijackSignal, asset);
+                    
                     botStats.signalsGenerated++;
                     botStats.lastSignal = signal;
                     
                     const canTrade = await AutoTraderService.canExecuteTrade(signal);
                     if (canTrade) {
-                        await AutoTraderService.executeTrade(signal);
+                        const recommendation = BrainScannerService.getRecommendation(hijackSignal);
+                        console.log(`[OPERATOR] 🎯 ${recommendation}`);
+                        await AutoTraderService.executeTrade(signal, hijackSignal);
                     }
                 }
             }
         } catch (err) {
-            console.error('[AUTOTRADER] Hijack force scan error:', err);
+            console.error('[OPERATOR] Brain scan error:', err);
         }
     },
     
-    // Generate signal from hijack force data (fallback mode)
+    // Convert Brain Scanner signal to trade signal
+    convertHijackToTradeSignal: (hijack: HijackSignal, asset: any): TradeSignal => {
+        const signals: SignalSource[] = hijack.triggers.map(t => ({
+            source: t.name,
+            signal: t.type === 'FOMO' || t.type === 'MOMENTUM' ? 'BULLISH' : 
+                    t.type === 'FUD' ? 'BEARISH' : 
+                    t.type === 'CONTRARIAN' ? (hijack.optimalDirection === 'LONG' ? 'BULLISH' : 'BEARISH') :
+                    'NEUTRAL',
+            value: t.description,
+            weight: t.strength
+        }));
+        
+        return {
+            ticker: hijack.ticker,
+            direction: hijack.optimalDirection,
+            confidence: hijack.confidence,
+            alignmentScore: hijack.hijackStrength,
+            signals,
+            price: asset.latestPrice,
+            timestamp: new Date()
+        };
+    },
+    
+    // Generate signal from hijack force data (legacy fallback mode)
     generateForceSignal: async (asset: any): Promise<TradeSignal | null> => {
         const ticker = asset.ticker;
         const baseTicker = ticker.replace('USD', '').replace('-USD', '');
@@ -508,8 +554,8 @@ export const AutoTraderService = {
         return true;
     },
 
-    // Execute a paper trade
-    executeTrade: async (signal: TradeSignal) => {
+    // Execute a paper trade - "Once you hijack brains, every other thing will be added onto you"
+    executeTrade: async (signal: TradeSignal, hijackSignal?: HijackSignal) => {
         try {
             const quantity = botConfig.positionSizeUsd / signal.price;
 
@@ -525,27 +571,32 @@ export const AutoTraderService = {
             botStats.tradesExecuted++;
             botStats.lastTrade = new Date();
 
-            const signalSummary = signal.signals.map(s => `${s.source}: ${s.signal}`).join(', ');
+            // Brain Hijack themed logging
+            const brainState = hijackSignal?.brainState || 'UNKNOWN';
+            const contrarian = hijackSignal?.contrarian ? '🔄 CONTRARIAN' : '🌊 MOMENTUM';
             
-            console.log(`[AUTOTRADER] 🤖 AUTO-${signal.direction} ${signal.ticker} @ $${signal.price.toFixed(2)}`);
-            console.log(`[AUTOTRADER] Confidence: ${signal.confidence}%, Alignment: ${signal.alignmentScore}%`);
-            console.log(`[AUTOTRADER] Signals: ${signalSummary}`);
+            console.log(`[OPERATOR] 🧠 BRAIN HIJACK EXECUTED`);
+            console.log(`[OPERATOR] ${contrarian} ${signal.direction} ${signal.ticker} @ $${signal.price.toFixed(2)}`);
+            console.log(`[OPERATOR] Herd State: ${brainState} | Strength: ${signal.alignmentScore}%`);
+            console.log(`[OPERATOR] Triggers: ${signal.signals.map(s => s.source).join(', ')}`);
 
             // Archive the trade
             await AutoTraderService.archiveTrade(signal);
 
-            // Telegram alert
+            // Telegram alert with Brain Hijack branding
+            const emoji = hijackSignal?.contrarian ? '🔄' : '🧠';
             await TelegramService.sendMessage(
-                `🤖 AUTO-TRADE EXECUTED\n` +
-                `${signal.direction} ${signal.ticker}\n` +
+                `${emoji} BRAIN HIJACK EXECUTED\n\n` +
+                `${contrarian} ${signal.direction}\n` +
+                `Asset: ${signal.ticker}\n` +
                 `Price: $${signal.price.toFixed(2)}\n` +
-                `ML Confidence: ${signal.confidence}%\n` +
-                `Alignment: ${signal.alignmentScore}%\n` +
-                `Signals: ${signal.signals.length}`
+                `Herd State: ${brainState}\n` +
+                `Hijack Strength: ${signal.alignmentScore}%\n` +
+                `Triggers: ${signal.signals.length}`
             );
 
         } catch (err) {
-            console.error('[AUTOTRADER] Trade execution error:', err);
+            console.error('[OPERATOR] Execution error:', err);
         }
     },
 

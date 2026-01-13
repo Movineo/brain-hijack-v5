@@ -226,65 +226,65 @@
         </div>
     </div>
 
-    <!-- AUTOTRADER BOT PANEL -->
-    <div class="panel" style="grid-column: 1 / -1; background: linear-gradient(135deg, #161b22 0%, #1a1f2e 100%); border: 1px solid #30363d;">
-        <div class="panel-title">🤖 AUTOTRADER BOT</div>
+    <!-- 🧠 BRAIN HIJACK OPERATOR - "Operate like a psychopathic scientist" -->
+    <div class="panel" style="grid-column: 1 / -1; background: linear-gradient(135deg, #0d1117 0%, #1a0a1f 50%, #161b22 100%); border: 2px solid #8b5cf6;">
+        <div class="panel-title" style="color: #a855f7;">🧠 BRAIN HIJACK OPERATOR <span style="font-size: 0.6em; color: #6b7280;">"Trade the herd's psychology, not the asset"</span></div>
         <div style="display: flex; gap: 20px; flex-wrap: wrap; padding: 10px;">
-            <!-- Bot Controls -->
+            <!-- Operator Controls -->
             <div style="flex: 1; min-width: 200px;">
                 <div style="margin-bottom: 15px;">
-                    <label style="color: #8b949e; display: block; margin-bottom: 5px;">Mode:</label>
-                    <select id="botMode" style="width: 100%; padding: 8px; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px;">
-                        <option value="CONSERVATIVE">🛡️ Conservative (Safe)</option>
-                        <option value="BALANCED" selected>⚖️ Balanced (Default)</option>
-                        <option value="AGGRESSIVE">🔥 Aggressive (Risky)</option>
+                    <label style="color: #8b949e; display: block; margin-bottom: 5px;">Psychopath Mode:</label>
+                    <select id="botMode" style="width: 100%; padding: 8px; background: #21262d; border: 1px solid #8b5cf6; color: #c9d1d9; border-radius: 4px;">
+                        <option value="CONSERVATIVE">🧊 Ice Cold (Patient)</option>
+                        <option value="BALANCED" selected>⚡ Calculated (Default)</option>
+                        <option value="AGGRESSIVE">🔥 Full Psycho (Max Hijack)</option>
                     </select>
                 </div>
                 <div style="display: flex; gap: 10px;">
-                    <button id="btnStartBot" onclick="startBot()" style="flex: 1; padding: 10px; background: #238636; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: bold;">
-                        ▶️ START
+                    <button id="btnStartBot" onclick="startBot()" style="flex: 1; padding: 10px; background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: bold;">
+                        🧠 HIJACK
                     </button>
                     <button id="btnStopBot" onclick="stopBot()" style="flex: 1; padding: 10px; background: #da3633; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: bold;" disabled>
-                        ⏹️ STOP
+                        ⏹️ DETACH
                     </button>
                 </div>
             </div>
             
-            <!-- Bot Stats -->
+            <!-- Brain Stats -->
             <div style="flex: 2; min-width: 300px;">
                 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
-                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px;">
-                        <div style="color: #8b949e; font-size: 0.8em;">STATUS</div>
-                        <div id="botStatus" style="font-weight: bold; color: #da3633;">STOPPED</div>
+                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px; border: 1px solid #30363d;">
+                        <div style="color: #8b949e; font-size: 0.8em;">HERD STATE</div>
+                        <div id="botStatus" style="font-weight: bold; color: #da3633;">DETACHED</div>
                     </div>
-                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px;">
-                        <div style="color: #8b949e; font-size: 0.8em;">MODE</div>
-                        <div id="botModeDisplay" style="font-weight: bold;">-</div>
+                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px; border: 1px solid #30363d;">
+                        <div style="color: #8b949e; font-size: 0.8em;">PSYCHO MODE</div>
+                        <div id="botModeDisplay" style="font-weight: bold; color: #a855f7;">-</div>
                     </div>
-                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px;">
-                        <div style="color: #8b949e; font-size: 0.8em;">SIGNALS</div>
+                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px; border: 1px solid #30363d;">
+                        <div style="color: #8b949e; font-size: 0.8em;">BRAINS SCANNED</div>
                         <div id="botSignals" style="font-weight: bold;">0</div>
                     </div>
-                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px;">
-                        <div style="color: #8b949e; font-size: 0.8em;">AUTO-TRADES</div>
-                        <div id="botTrades" style="font-weight: bold; color: #58a6ff;">0</div>
+                    <div class="stat-box" style="text-align: center; padding: 10px; background: #21262d; border-radius: 6px; border: 1px solid #30363d;">
+                        <div style="color: #8b949e; font-size: 0.8em;">HIJACKS</div>
+                        <div id="botTrades" style="font-weight: bold; color: #22d3ee;">0</div>
                     </div>
                 </div>
-                <!-- Last Signal -->
-                <div id="lastSignalBox" style="margin-top: 10px; padding: 10px; background: #21262d; border-radius: 6px; display: none;">
-                    <div style="color: #8b949e; font-size: 0.8em; margin-bottom: 5px;">LAST SIGNAL:</div>
+                <!-- Last Hijack Signal -->
+                <div id="lastSignalBox" style="margin-top: 10px; padding: 10px; background: linear-gradient(135deg, #21262d 0%, #1a0a1f 100%); border-radius: 6px; border: 1px solid #8b5cf680; display: none;">
+                    <div style="color: #a855f7; font-size: 0.8em; margin-bottom: 5px;">🧠 LAST BRAIN HIJACK:</div>
                     <div id="lastSignalContent" style="font-size: 0.9em;"></div>
                 </div>
             </div>
             
-            <!-- Config Summary -->
-            <div style="flex: 1; min-width: 150px; padding: 10px; background: #21262d; border-radius: 6px;">
-                <div style="color: #8b949e; font-size: 0.8em; margin-bottom: 8px;">REQUIREMENTS:</div>
+            <!-- Hijack Requirements -->
+            <div style="flex: 1; min-width: 150px; padding: 10px; background: #21262d; border-radius: 6px; border: 1px solid #30363d;">
+                <div style="color: #a855f7; font-size: 0.8em; margin-bottom: 8px;">HIJACK THRESHOLDS:</div>
                 <div id="botConfig" style="font-size: 0.85em; line-height: 1.6;">
-                    <div>ML Conf: ≥<span id="cfgML">55</span>%</div>
-                    <div>Alignment: ≥<span id="cfgAlign">60</span>%</div>
-                    <div>Max Pos: <span id="cfgMaxPos">3</span></div>
-                    <div>Cooldown: <span id="cfgCooldown">30</span>m</div>
+                    <div>🧠 Scan: ≥<span id="cfgML">55</span>%</div>
+                    <div>🎯 Align: ≥<span id="cfgAlign">60</span>%</div>
+                    <div>📊 Victims: <span id="cfgMaxPos">3</span></div>
+                    <div>⏱️ Reset: <span id="cfgCooldown">30</span>m</div>
                 </div>
             </div>
         </div>
@@ -465,10 +465,11 @@
         document.getElementById("statOpen").innerText = stats.openPositions;
     }
 
-    // ============ AUTOTRADER BOT FUNCTIONS ============
+    // ============ 🧠 BRAIN HIJACK OPERATOR FUNCTIONS ============
     
     async function startBot() {
         const mode = document.getElementById('botMode').value;
+        const modeNames = { CONSERVATIVE: 'Ice Cold', BALANCED: 'Calculated', AGGRESSIVE: 'Full Psycho' };
         try {
             const res = await fetch('/api/v1/sentiment/autotrader/start', {
                 method: 'POST',
@@ -478,12 +479,12 @@
             const json = await res.json();
             if (json.success) {
                 updateBotUI(json.data);
-                showNotification('🤖 AutoTrader Started', `Running in ${mode} mode`);
+                showNotification('🧠 Brain Hijack Active', `Operating in ${modeNames[mode]} mode`);
             } else {
                 showNotification('⚠️ Error', json.message);
             }
         } catch (e) {
-            console.error('Failed to start bot:', e);
+            console.error('Failed to start Brain Hijack:', e);
         }
     }
     
@@ -495,10 +496,10 @@
             const json = await res.json();
             if (json.success) {
                 updateBotUI(json.data);
-                showNotification('🛑 AutoTrader Stopped', `Total trades: ${json.data.tradesExecuted}`);
+                showNotification('🔌 Detached from Herd', `Total hijacks: ${json.data.tradesExecuted}`);
             }
         } catch (e) {
-            console.error('Failed to stop bot:', e);
+            console.error('Failed to detach:', e);
         }
     }
     
@@ -511,7 +512,7 @@
                 updateBotConfig(json.data.config);
             }
         } catch (e) {
-            console.log('AutoTrader status unavailable');
+            console.log('Brain Hijack status unavailable');
         }
     }
     
@@ -519,32 +520,33 @@
         const statusEl = document.getElementById('botStatus');
         const startBtn = document.getElementById('btnStartBot');
         const stopBtn = document.getElementById('btnStopBot');
+        const modeNames = { CONSERVATIVE: '🧊 ICE COLD', BALANCED: '⚡ CALCULATED', AGGRESSIVE: '🔥 PSYCHO' };
         
         if (stats.isRunning) {
-            statusEl.innerText = 'RUNNING';
-            statusEl.style.color = '#238636';
+            statusEl.innerText = 'SCANNING';
+            statusEl.style.color = '#a855f7';
             startBtn.disabled = true;
             stopBtn.disabled = false;
         } else {
-            statusEl.innerText = 'STOPPED';
-            statusEl.style.color = '#da3633';
+            statusEl.innerText = 'DETACHED';
+            statusEl.style.color = '#6b7280';
             startBtn.disabled = false;
             stopBtn.disabled = true;
         }
         
-        document.getElementById('botModeDisplay').innerText = stats.mode || '-';
+        document.getElementById('botModeDisplay').innerText = modeNames[stats.mode] || '-';
         document.getElementById('botSignals').innerText = stats.signalsGenerated || 0;
         document.getElementById('botTrades').innerText = stats.tradesExecuted || 0;
         
-        // Update last signal display
+        // Update last hijack display
         if (stats.lastSignal) {
             const sig = stats.lastSignal;
             document.getElementById('lastSignalBox').style.display = 'block';
-            const alignColor = sig.alignmentScore >= 70 ? '#238636' : sig.alignmentScore >= 50 ? '#d29922' : '#da3633';
+            const alignColor = sig.alignmentScore >= 70 ? '#22d3ee' : sig.alignmentScore >= 50 ? '#d29922' : '#da3633';
             document.getElementById('lastSignalContent').innerHTML = `
-                <span style="color: ${sig.direction === 'LONG' ? '#238636' : '#da3633'}; font-weight: bold;">${sig.direction}</span>
+                <span style="color: ${sig.direction === 'LONG' ? '#22c55e' : '#ef4444'}; font-weight: bold;">🧠 ${sig.direction}</span>
                 ${sig.ticker} @ $${sig.price?.toFixed(2) || '0.00'}<br>
-                <span style="color: #8b949e;">Conf: ${sig.confidence}% | Align: <span style="color: ${alignColor}">${sig.alignmentScore}%</span></span>
+                <span style="color: #8b949e;">Brain Scan: ${sig.confidence}% | Herd Align: <span style="color: ${alignColor}">${sig.alignmentScore}%</span></span>
             `;
         }
     }
